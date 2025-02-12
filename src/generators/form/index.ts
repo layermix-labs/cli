@@ -1,12 +1,14 @@
-import {
-  writeGeneratedFiles,
-  GeneratedFile,
-  prepareTemplate,
-} from "../shared/template-utils";
+import { writeGeneratedFiles, GeneratedFile } from "../shared/template-utils";
 import { selectOrCreateDomain } from "../shared/domain-utils";
 import { camelCase, capitalCase, pascalCase } from "change-case";
 import { input } from "@inquirer/prompts";
-import { generateFormRoute } from "../shared/generatorFunctions";
+import {
+  generateFormAction,
+  generateFormComponent,
+  generateFormPage,
+  generateFormRoute,
+  generateFormSchema,
+} from "../shared/generatorFunctions";
 
 function toPascalWithSuffix(input: string, suffix: string) {
   if (input.endsWith(suffix)) {
@@ -65,30 +67,6 @@ export async function generateForm(): Promise<string[]> {
   const schemaName = `${camelCase(formName)}Schema`;
   const actionName = `${camelCase(formName)}Action`;
 
-  type FormGeneratorInputs = {
-    actionName: string;
-    formTitle: string;
-    formName: string;
-    schemaName: string;
-  };
-
-  type SchemaGeneratorInputs = {
-    formName: string;
-    schemaName: string;
-  };
-
-  type ActionGeneratorInputs = {
-    formName: string;
-    actionName: string;
-    schemaName: string;
-  };
-
-  type PageGeneratorInputs = {
-    pageName: string;
-    formName: string;
-    domain: string;
-  };
-
   const files: Promise<GeneratedFile>[] = [];
 
   if (routeFile) {
@@ -104,59 +82,38 @@ export async function generateForm(): Promise<string[]> {
 
   if (pageName) {
     files.push(
-      prepareTemplate<PageGeneratorInputs>({
-        data: {
-          formName,
-          pageName,
-          domain,
-        },
+      generateFormPage({
+        pageName,
+        formName,
         domain,
-        template: "page-with-form.ejs",
-        templateRoot: "form",
-        outputFile: `components/${pageName}/${pageName}.tsx`,
       }),
     );
   }
 
   files.push(
-    prepareTemplate<FormGeneratorInputs>({
-      data: {
-        actionName,
-        formName,
-        formTitle,
-        schemaName,
-      },
+    generateFormComponent({
+      actionName,
+      formName,
+      formTitle,
+      schemaName,
       domain,
-      template: "form.ejs",
-      templateRoot: "form",
-      outputFile: `components/${formName}Form/${formName}Form.tsx`,
     }),
   );
 
   files.push(
-    prepareTemplate<SchemaGeneratorInputs>({
-      data: {
-        formName,
-        schemaName,
-      },
+    generateFormSchema({
+      formName,
+      schemaName,
       domain,
-      template: "schema.ejs",
-      templateRoot: "form",
-      outputFile: `schemas/${schemaName}.ts`,
     }),
   );
 
   files.push(
-    prepareTemplate<ActionGeneratorInputs>({
-      data: {
-        formName,
-        actionName,
-        schemaName,
-      },
+    generateFormAction({
+      formName,
+      actionName,
+      schemaName,
       domain,
-      template: "action.ejs",
-      templateRoot: "form",
-      outputFile: `actions/${actionName}.server.ts`,
     }),
   );
 
