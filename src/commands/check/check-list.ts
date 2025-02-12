@@ -1,6 +1,6 @@
 import { runCommand } from "../../utils/exec";
 
-type CheckSettings = {
+export type CheckSettings = {
   name: string;
   description: string;
   alias?: string | string[];
@@ -13,12 +13,12 @@ export const checkList: CheckSettings[] = [
   {
     name: "check",
     description: "Runs all the checks",
-    subChecks: [],
+    subChecks: ["check:static", "check:tests", "check:e2e"],
   },
   {
     name: "check:static",
     description: "Runs biome, types and unused-code",
-    subChecks: [],
+    subChecks: ["check:style", "check:types", "check:unused-code"],
   },
   {
     name: "check:style",
