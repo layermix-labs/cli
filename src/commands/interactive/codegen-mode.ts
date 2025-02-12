@@ -6,10 +6,11 @@ export async function handleCodegenMode() {
   const codeGenMode = await select({
     message: "What would you like to generate?",
     choices: formatChoices([
-      { value: "form", columns: ["🏗️ Functionality: Form + Schema"] },
+      { value: "gen-form", columns: ["🏗️ Functionality: Form + Schema"] },
       {
-        value: "page",
-        columns: ["🏗️ Functionality: Page + Form + Action + Schema"],
+        // There will be more gen-* generators
+        value: "gen-example",
+        columns: ["🏗️ Functionality: Generate Example"],
       },
       {
         value: "e2e-tests",
@@ -27,17 +28,20 @@ export async function handleCodegenMode() {
       },
     ]),
   });
-
-  if (codeGenMode === "e2e-tests") {
-    runCommand("npx playwright codegen localhost:5173");
-    return;
+  switch (codeGenMode) {
+    case "form":
+      // TODO: use ./generators/form, ask for form name, infer schema
+      return;
+    case "e2e-tests":
+      runCommand("npx playwright codegen localhost:5173");
+      return;
+    case "better-auth-prisma":
+      runCommand(
+        "npx @better-auth/cli generate --config app/Auth/services/better-auth.server.ts --output ./app/Core/services/prisma/auth-reference.schema.prisma",
+      );
+      return;
+    default:
+      console.log("Code generation features coming soon! ", codeGenMode);
+      return;
   }
-
-  if (codeGenMode === "better-auth-prisma") {
-    runCommand(
-      "npx @better-auth/cli generate --config app/Auth/services/better-auth.server.ts --output ./app/Core/services/prisma/auth-reference.schema.prisma",
-    );
-    return;
-  }
-  console.log("Code generation features coming soon! ", codeGenMode);
 }
