@@ -1,51 +1,163 @@
-import path from "path";
-import { formQuestions } from "./questions";
-import { askQuestions } from "../shared/questions";
 import {
-  processTemplate,
   writeGeneratedFiles,
   GeneratedFile,
+  prepareTemplate,
 } from "../shared/template-utils";
 import { selectOrCreateDomain } from "../shared/domain-utils";
+import { camelCase, capitalCase } from "change-case";
+import { input } from "@inquirer/prompts";
+
+function toPascalWithSuffix(input: string, suffix: string) {
+  if (input.endsWith(suffix)) {
+    if (input === suffix) {
+      throw new Error(`Input cannot be just the suffix "${suffix}"`);
+    }
+    return input;
+  }
+
+  const pascalCased = input.charAt(0).toUpperCase() + input.slice(1);
+  return pascalCased + suffix;
+}
 
 export async function generateForm(): Promise<string[]> {
-  const appPath = "app";
   // 1. Select or create domain
-  const domain = await selectOrCreateDomain(appPath);
+  const domain = await selectOrCreateDomain("app");
 
   // 2. Ask form-specific questions
-  const answers = await askQuestions(formQuestions);
+  let formName = await input({
+    message: "What is the name of your form?",
+    validate: (input: string) => {
+      if (!input.trim()) return "Form name cannot be empty";
+      return true;
+    },
+  });
+  // formName = toPascalWithSuffix(formName, "Form");
 
-  // 3. Process templates
-  const templateDir = path.join(__dirname, "templates");
-  const destinationDir = path.join(appPath, domain, "components");
+  // 2. Should we generate a route?
+  const routeFile = await input({
+    message: "Route file name: (leave empty to skip)",
+    validate: (input: string) => {
+      if (!input.trim()) return true;
+      // Must end with .tsx
+      if (!input.endsWith(".tsx")) return "Route file must end with .tsx";
+      return true;
+    },
+  });
+
+  let pageName = await input({
+    message: "Page name: (leave empty to skip)",
+    validate: (input: string) => {
+      if (!input.trim()) return true;
+      return true;
+    },
+  });
+  pageName = toPascalWithSuffix(pageName, "Page");
+
+  // Assume other variables
+  const formTitle = capitalCase(formName);
+  const schemaName = `${camelCase(formName)}Schema`;
+  const actionName = `${camelCase(formName)}Action`;
+
+  type FormGeneratorInputs = {
+    actionName: string;
+    formTitle: string;
+    formName: string;
+    schemaName: string;
+  };
+
+  type SchemaGeneratorInputs = {
+    formName: string;
+    schemaName: string;
+  };
+
+  type ActionGeneratorInputs = {
+    formName: string;
+    actionName: string;
+    schemaName: string;
+  };
+
+  type RouteGeneratorInputs = {
+    pageName: string;
+    actionName: string;
+    domain: string;
+  };
+
+  type PageGeneratorInputs = {
+    pageName: string;
+    formName: string;
+    domain: string;
+  };
 
   const files: GeneratedFile[] = [];
 
-  // Process form component
-  const formContent = await processTemplate(
-    path.join(templateDir, "form.ejs"),
-    answers,
+  if (routeFile) {
+    files.push(
+      await prepareTemplate<RouteGeneratorInputs>({
+        data: {
+          actionName,
+          pageName,
+          domain,
+        },
+        domain,
+        template: "route.ejs",
+        outputFile: `../routes/${routeFile}`,
+      }),
+    );
+  }
+
+  if (pageName) {
+    files.push(
+      await prepareTemplate<PageGeneratorInputs>({
+        data: {
+          formName,
+          pageName,
+          domain,
+        },
+        domain,
+        template: "page-with-form.ejs",
+        outputFile: `components/${pageName}/${pageName}.tsx`,
+      }),
+    );
+  }
+
+  files.push(
+    await prepareTemplate<FormGeneratorInputs>({
+      data: {
+        actionName,
+        formName,
+        formTitle,
+        schemaName,
+      },
+      domain,
+      template: "form.ejs",
+      outputFile: `components/${formName}Form/${formName}Form.tsx`,
+    }),
   );
 
-  files.push({
-    path: path.join(destinationDir, `${answers.formName}Form.tsx`),
-    content: formContent,
-  });
-
-  // Process schema
-  const schemaContent = await processTemplate(
-    path.join(templateDir, "schema.ejs"),
-    answers,
+  files.push(
+    await prepareTemplate<SchemaGeneratorInputs>({
+      data: {
+        formName,
+        schemaName,
+      },
+      domain,
+      template: "schema.ejs",
+      outputFile: `schemas/${schemaName}.ts`,
+    }),
   );
 
-  files.push({
-    path: path.join(
-      destinationDir,
-      `${answers.formName.toLowerCase()}-schema.ts`,
-    ),
-    content: schemaContent,
-  });
+  files.push(
+    await prepareTemplate<ActionGeneratorInputs>({
+      data: {
+        formName,
+        actionName,
+        schemaName,
+      },
+      domain,
+      template: "action.ejs",
+      outputFile: `actions/${actionName}.server.ts`,
+    }),
+  );
 
   // 4. Write files and return paths
   const writtenFiles = await writeGeneratedFiles(files);

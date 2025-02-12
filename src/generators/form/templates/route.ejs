@@ -1,0 +1,10 @@
+<% if (pageName) { %>
+import <%= pageName %> from "~/<%= domain %>/components/<%= pageName %>/<%= pageName %>";
+<% } %>
+import <%= actionName %> from "~/<%= domain %>/actions/<%= actionName %>.server";
+
+export const action = <%= actionName %>;
+
+<% if (pageName) { %>
+export default <%= pageName %>;
+<% } %>

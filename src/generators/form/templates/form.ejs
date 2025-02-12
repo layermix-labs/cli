@@ -1,18 +1,39 @@
-import { z } from "zod";
-import { <%= formName %>Schema } from "./<%= formName.toLowerCase() %>-schema";
+import { getFormProps, getInputProps, useForm } from "@conform-to/react";
+import { parseWithZod } from "@conform-to/zod";
+import { useFetcher } from "@remix-run/react";
+import { <%= schemaName %> } from "../../schemas/<%= schemaName %>";
+import Input from "~/LayerMix/components/Input/Input";
+import type <%= actionName %> from "../../actions/<%= actionName %>";
 
-export function <%= formName %>Form() {
+export default function <%= formName %>Form() {
+  const fetcher = useFetcher<typeof <%= actionName %>>();
+  const [form, fields] = useForm({
+    shouldValidate: "onBlur",
+    shouldRevalidate: "onInput",
+    onValidate: ({ formData }) =>
+      parseWithZod(formData, { schema: <%= schemaName %> }),
+  });
+
   return (
-    <form className="space-y-4">
-      {/* Form fields will go here */}
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
+    <fetcher.Form
+      className="card w-96 bg-base-100 shadow-xl bg-base-200"
+      method="POST"
+      {...getFormProps(form)}
+    >
+      <div className="card-body">
+        <h2 className="card-title"><%= formTitle %></h2>
+        {form.errors && <span className="text-error">{form.errors}</span>}
+        <Input
+          label="Example"
+          error={fields.EXAMPLE.errors}
+          placeholder="Example"
+          defaultValue={fields.EXAMPLE.initialValue}
+          {...getInputProps(fields.EXAMPLE, { type: "text" })}
+        />
+        <button type="submit" className="btn w-full" name="subaction" value="<%= formName %>">
           Submit
         </button>
       </div>
-    </form>
+    </fetcher.Form>
   );
 }

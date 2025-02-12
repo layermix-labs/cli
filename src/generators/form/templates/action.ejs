@@ -1,0 +1,16 @@
+import { z } from "zod";
+import { validateWithHandler } from "~/LayerMix/utils/validateInputs";
+import { bySubaction } from "~/LayerMix/utils/bySubaction";
+import { <%= schemaName %> } from "../schemas/<%= schemaName %>";
+
+const <%= actionName %> = validateWithHandler({
+  bodySchema: z.discriminatedUnion("subaction", [<%= schemaName %>]),
+  // permission: {},
+  handler: bySubaction({
+    <%= formName %>: async ({ body: { EXAMPLE }, request }) => {
+      return { status: 'success' };
+    },
+  })
+});
+
+export default <%= actionName %>;
