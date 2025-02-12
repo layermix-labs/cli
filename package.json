@@ -1,6 +1,6 @@
 {
   "name": "@layermix/cli",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "CLI tool for layermix framework",
   "main": "dist/index.js",
   "bin": {
