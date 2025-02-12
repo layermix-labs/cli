@@ -1,3 +1,5 @@
+# LayerMix CLI
+
 |                   | Alias             | Description                       |
 | ----------------- | ----------------- | --------------------------------- |
 | **COMBINED:**     |                   |                                   |
@@ -12,3 +14,8 @@
 | check:lint        |                   | Runs biome linting                |
 | check:format      |                   | Runs biome formatting             |
 | check:imports     |                   | Runs biome import organizing      |
+
+
+TODO:
+ - Watch mode for tests
+ - Record mode for playwright
