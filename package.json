@@ -1,0 +1,10 @@
+{
+  "name": "@layermix/cli",
+  "version": "1.0.0",
+  "description": "CLI tool for layermix framework",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.3.5"
+  }
+}
