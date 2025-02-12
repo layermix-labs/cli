@@ -6,8 +6,9 @@ export async function handleInteractiveMode() {
   const mode = await select({
     message: "What would you like to do?",
     choices: [
-      { value: "checks", name: "Run Checks" },
-      { value: "codegen", name: "Generate Code" },
+      { value: "checks", name: "✅ Run Checks" },
+      { value: "codegen", name: "🧩 Generate Code" },
+      // TODO: Debug playwright
     ],
   });
 
