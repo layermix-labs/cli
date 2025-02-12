@@ -22,7 +22,6 @@
     "@playwright/test": "1.49.1",
     "@vitest/browser": "3.0.2",
     "commander": "^13.1.0",
-    "inquirer-select-pro": "^1.0.0-alpha.9",
     "knip": "5.42.2",
     "playwright": "1.49.1",
     "vitest": "3.0.2",

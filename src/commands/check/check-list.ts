@@ -24,9 +24,7 @@ export const checkList: CheckSettings[] = [
     name: "check:style",
     description: "Runs all biome checks",
     alias: "check:biome",
-    subChecks: [],
-    action: () => runCommand("yarn biome check --write"),
-    actionCi: () => runCommand("yarn biome check --write"),
+    subChecks: ["check:lint", "check:format", "check:imports"],
   },
   {
     name: "check:types",

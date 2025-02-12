@@ -1,5 +1,4 @@
-import { select } from "@inquirer/prompts";
-import { select as multiselect } from "inquirer-select-pro";
+import { select, checkbox } from "@inquirer/prompts";
 import { checkList } from "../check/check-list";
 import { executeChecks } from "../check/execute-checks";
 
@@ -21,9 +20,9 @@ export async function handleInteractiveMode() {
         value: check,
       }));
 
-    const selected = await multiselect({
+    const selected = await checkbox({
       message: "Select checks to run",
-      options: checkOptions,
+      choices: checkOptions,
     });
 
     executeChecks(selected);
