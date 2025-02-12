@@ -1917,6 +1917,11 @@ tree-kill@^1.2.2:
   resolved "https://registry.yarnpkg.com/tree-kill/-/tree-kill-1.2.2.tgz#4ca09a9092c88b73a7cdc5e8a01b507b0790a0cc"
   integrity sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==
 
+ts-essentials@>=10.0.0:
+  version "10.0.4"
+  resolved "https://registry.yarnpkg.com/ts-essentials/-/ts-essentials-10.0.4.tgz#db8381c2e44cddb3339a2286174c4763bc1dcedb"
+  integrity sha512-lwYdz28+S4nicm+jFi6V58LaAIpxzhg9rLdgNC1VsdP/xiFBseGhF1M/shwCk6zMmwahBZdXcl34LVHrEang3A==
+
 ts-interface-checker@^0.1.9:
   version "0.1.13"
   resolved "https://registry.yarnpkg.com/ts-interface-checker/-/ts-interface-checker-0.1.13.tgz#784fd3d679722bc103b1b4b8030bcddb5db2a699"
@@ -1999,10 +2004,17 @@ vite-node@3.0.5:
   optionalDependencies:
     fsevents "~2.3.3"
 
-vitest-browser-react@0.1.0:
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/vitest-browser-react/-/vitest-browser-react-0.1.0.tgz#2d3667851d61cd5823cd7f130335d68705267e65"
-  integrity sha512-+gTux9mZi/ovwOGYgzxTX8/v7aM+MnkYlI/lh+10S37Nm6hLf9dy8HBi4u3j6d49a64aKot++yDLRZKhQkMrNA==
+vitest-browser-react@0.1.1:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/vitest-browser-react/-/vitest-browser-react-0.1.1.tgz#5e05d0e6ba8c9a362894074700dfc322bfd2b101"
+  integrity sha512-n9l+sIAexKqqfBuEkjVGdfZ4xAn1Gn/+wc4Mo8KsUSUOVoM9evSY0rVXdMIzCQqloT/zvmFGAtziFINkqu+t7g==
+
+vitest-mock-extended@^2.0.2:
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/vitest-mock-extended/-/vitest-mock-extended-2.0.2.tgz#bde329b0ca0cdfc2b0a3c71291e1af64559e23b2"
+  integrity sha512-n3MBqVITKyclZ0n0y66hkT4UiiEYFQn9tteAnIxT0MPz1Z8nFcPUG3Cf0cZOyoPOj/cq6Ab1XFw2lM/qM5EDWQ==
+  dependencies:
+    ts-essentials ">=10.0.0"
 
 vitest@3.0.5:
   version "3.0.5"
