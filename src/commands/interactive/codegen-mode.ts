@@ -1,6 +1,7 @@
 import { select } from "@inquirer/prompts";
 import { runCommand } from "../../utils/exec";
 import { formatChoices } from "./table-formatter";
+import { generateForm } from "../../generators/form";
 
 export async function handleCodegenMode() {
   const codeGenMode = await select({
@@ -29,8 +30,10 @@ export async function handleCodegenMode() {
     ]),
   });
   switch (codeGenMode) {
-    case "form":
-      // TODO: use ./generators/form, ask for form name, infer schema
+    case "gen-form":
+      const generatedFiles = await generateForm();
+      console.log("\nGenerated files:");
+      generatedFiles.forEach((file) => console.log(`- ${file}`));
       return;
     case "e2e-tests":
       runCommand("npx playwright codegen localhost:5173");

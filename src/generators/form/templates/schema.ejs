@@ -1,0 +1,7 @@
+import { z } from "zod";
+
+export const <%= formName %>Schema = z.object({
+  // Add your schema fields here
+});
+
+export type <%= formName %>Type = z.infer<typeof <%= formName %>Schema>;
