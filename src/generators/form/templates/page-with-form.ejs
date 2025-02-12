@@ -1,10 +1,14 @@
+<% if (formName) { %>
 import <%= formName %>Form from "~/<%= domain %>/components/<%= formName %>Form/<%= formName %>Form";
+<% } %>
 
 export default function <%= pageName %>() {
   return (
     <div>
       <h1><%= pageName %></h1>
-      <<%= formName %>Form />
+      <% if (formName) { %>
+        <<%= formName %>Form />
+      <% } %>
     </div>
   );
 }

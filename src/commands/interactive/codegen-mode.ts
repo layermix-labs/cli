@@ -2,17 +2,14 @@ import { select } from "@inquirer/prompts";
 import { runCommand } from "../../utils/exec";
 import { formatChoices } from "./table-formatter";
 import { generateForm } from "../../generators/form";
+import { generatePage } from "../../generators/page";
 
 export async function handleCodegenMode() {
   const codeGenMode = await select({
     message: "What would you like to generate?",
     choices: formatChoices([
       { value: "gen-form", columns: ["🧩 Functionality: Form + Schema"] },
-      {
-        // There will be more gen-* generators
-        value: "gen-example",
-        columns: ["🧩 Functionality: Generate Example"],
-      },
+      { value: "gen-page", columns: ["📄 Page: Generate Page + Route"] },
       {
         value: "e2e-tests",
         columns: [
@@ -34,6 +31,11 @@ export async function handleCodegenMode() {
       const generatedFiles = await generateForm();
       console.log("\nGenerated files:");
       generatedFiles.forEach((file) => console.log(`- ${file}`));
+      return;
+    case "gen-page":
+      const pageFiles = await generatePage();
+      console.log("\nGenerated files:");
+      pageFiles.forEach((file) => console.log(`- ${file}`));
       return;
     case "e2e-tests":
       runCommand("npx playwright codegen localhost:5173");

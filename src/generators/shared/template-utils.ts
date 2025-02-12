@@ -63,14 +63,21 @@ export async function prepareTemplate<T extends object>({
   domain,
   template,
   outputFile,
+  templateRoot,
 }: {
   data: T;
   domain: string;
   template: string;
   outputFile: string;
+  templateRoot: string;
 }) {
   // 3. Process templates
-  const templateDir = path.join(__dirname, "generators", "form", "templates");
+  const templateDir = path.join(
+    __dirname,
+    "generators",
+    templateRoot,
+    "templates",
+  );
   const destinationDir = path.join("app", domain);
   const content = await processTemplate(
     path.join(templateDir, template),

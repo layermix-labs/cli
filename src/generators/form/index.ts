@@ -6,6 +6,7 @@ import {
 import { selectOrCreateDomain } from "../shared/domain-utils";
 import { camelCase, capitalCase, pascalCase } from "change-case";
 import { input } from "@inquirer/prompts";
+import { generateFormRoute } from "../shared/generatorFunctions";
 
 function toPascalWithSuffix(input: string, suffix: string) {
   if (input.endsWith(suffix)) {
@@ -82,38 +83,28 @@ export async function generateForm(): Promise<string[]> {
     schemaName: string;
   };
 
-  type RouteGeneratorInputs = {
-    pageName: string;
-    actionName: string;
-    domain: string;
-  };
-
   type PageGeneratorInputs = {
     pageName: string;
     formName: string;
     domain: string;
   };
 
-  const files: GeneratedFile[] = [];
+  const files: Promise<GeneratedFile>[] = [];
 
   if (routeFile) {
     files.push(
-      await prepareTemplate<RouteGeneratorInputs>({
-        data: {
-          actionName,
-          pageName,
-          domain,
-        },
+      generateFormRoute({
         domain,
-        template: "route.ejs",
-        outputFile: `../routes/${routeFile}`,
+        routeFile,
+        pageName,
+        actionName,
       }),
     );
   }
 
   if (pageName) {
     files.push(
-      await prepareTemplate<PageGeneratorInputs>({
+      prepareTemplate<PageGeneratorInputs>({
         data: {
           formName,
           pageName,
@@ -121,13 +112,14 @@ export async function generateForm(): Promise<string[]> {
         },
         domain,
         template: "page-with-form.ejs",
+        templateRoot: "form",
         outputFile: `components/${pageName}/${pageName}.tsx`,
       }),
     );
   }
 
   files.push(
-    await prepareTemplate<FormGeneratorInputs>({
+    prepareTemplate<FormGeneratorInputs>({
       data: {
         actionName,
         formName,
@@ -136,24 +128,26 @@ export async function generateForm(): Promise<string[]> {
       },
       domain,
       template: "form.ejs",
+      templateRoot: "form",
       outputFile: `components/${formName}Form/${formName}Form.tsx`,
     }),
   );
 
   files.push(
-    await prepareTemplate<SchemaGeneratorInputs>({
+    prepareTemplate<SchemaGeneratorInputs>({
       data: {
         formName,
         schemaName,
       },
       domain,
       template: "schema.ejs",
+      templateRoot: "form",
       outputFile: `schemas/${schemaName}.ts`,
     }),
   );
 
   files.push(
-    await prepareTemplate<ActionGeneratorInputs>({
+    prepareTemplate<ActionGeneratorInputs>({
       data: {
         formName,
         actionName,
@@ -161,12 +155,13 @@ export async function generateForm(): Promise<string[]> {
       },
       domain,
       template: "action.ejs",
+      templateRoot: "form",
       outputFile: `actions/${actionName}.server.ts`,
     }),
   );
 
   // 4. Write files and return paths
-  const writtenFiles = await writeGeneratedFiles(files);
+  const writtenFiles = await writeGeneratedFiles(await Promise.all(files));
 
   return writtenFiles;
 }

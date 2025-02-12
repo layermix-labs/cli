@@ -13,6 +13,7 @@ export default defineConfig({
     // Create generators directory structure in dist
     const templateDirs = [
       "generators/form/templates",
+      "generators/page/templates",
       // Add other template directories here as needed
     ];
 
