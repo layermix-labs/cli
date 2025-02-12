@@ -6,5 +6,4 @@ export default defineConfig({
   format: ["cjs"],
   clean: true,
   shims: true,
-  onSuccess: "node dist/index.js",
 });
