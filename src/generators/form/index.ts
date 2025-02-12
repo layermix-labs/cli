@@ -4,7 +4,7 @@ import {
   prepareTemplate,
 } from "../shared/template-utils";
 import { selectOrCreateDomain } from "../shared/domain-utils";
-import { camelCase, capitalCase } from "change-case";
+import { camelCase, capitalCase, pascalCase } from "change-case";
 import { input } from "@inquirer/prompts";
 
 function toPascalWithSuffix(input: string, suffix: string) {
@@ -15,8 +15,14 @@ function toPascalWithSuffix(input: string, suffix: string) {
     return input;
   }
 
-  const pascalCased = input.charAt(0).toUpperCase() + input.slice(1);
-  return pascalCased + suffix;
+  return pascalCase(input) + suffix;
+}
+
+function stripSuffix(input: string, suffix: string) {
+  if (input.endsWith(suffix)) {
+    return input.slice(0, -suffix.length);
+  }
+  return input;
 }
 
 export async function generateForm(): Promise<string[]> {
@@ -31,7 +37,7 @@ export async function generateForm(): Promise<string[]> {
       return true;
     },
   });
-  // formName = toPascalWithSuffix(formName, "Form");
+  formName = stripSuffix(formName, "Form");
 
   // 2. Should we generate a route?
   const routeFile = await input({

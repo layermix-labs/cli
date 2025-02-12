@@ -3,11 +3,12 @@ import { parseWithZod } from "@conform-to/zod";
 import { useFetcher } from "@remix-run/react";
 import { <%= schemaName %> } from "../../schemas/<%= schemaName %>";
 import Input from "~/LayerMix/components/Input/Input";
-import type <%= actionName %> from "../../actions/<%= actionName %>";
+import type <%= actionName %> from "../../actions/<%= actionName %>.server";
 
 export default function <%= formName %>Form() {
   const fetcher = useFetcher<typeof <%= actionName %>>();
   const [form, fields] = useForm({
+    lastResult: fetcher.data,
     shouldValidate: "onBlur",
     shouldRevalidate: "onInput",
     onValidate: ({ formData }) =>
