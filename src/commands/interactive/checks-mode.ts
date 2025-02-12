@@ -1,21 +1,23 @@
 import { checkbox } from "@inquirer/prompts";
 import { checkList } from "../check/check-list";
 import { executeChecks } from "../check/execute-checks";
-import { formatCheckName } from "./table-formatter";
+import { formatChoices, getAliasString } from "./table-formatter";
 
 export async function handleChecksMode() {
-  const checkOptions = checkList
+  const choices = checkList
     .filter((check) => check.action || check.actionCi)
     .map((check) => ({
-      name: formatCheckName(check),
-      message: check.description,
+      columns: [
+        check.name,
+        getAliasString(check) ? `(${getAliasString(check)})` : "",
+        check.description,
+      ],
       value: check,
-      short: check.name,
     }));
 
   const selected = await checkbox({
     message: "Select checks to run",
-    choices: checkOptions,
+    choices: formatChoices(choices),
   });
 
   executeChecks(selected);

@@ -1,21 +1,31 @@
 import { select } from "@inquirer/prompts";
 import { runCommand } from "../../utils/exec";
+import { formatChoices } from "./table-formatter";
 
 export async function handleCodegenMode() {
   const codeGenMode = await select({
     message: "What would you like to generate?",
-    choices: [
-      { value: "form", name: "Functionality: Form" },
-      { value: "page", name: "Functionality: Page + Form + Action + Schema" },
+    choices: formatChoices([
+      { value: "form", columns: ["🏗️ Functionality: Form + Schema"] },
+      {
+        value: "page",
+        columns: ["🏗️ Functionality: Page + Form + Action + Schema"],
+      },
       {
         value: "e2e-tests",
-        name: "Playwright E2E Tests",
+        columns: [
+          "🔄 Playwright E2E Tests",
+          "Runs playwright recorder against localhost:5173",
+        ],
       },
       {
         value: "better-auth-prisma",
-        name: "Better Auth Prisma Reference Schema",
+        columns: [
+          "📜 Better Auth Prisma Reference Schema",
+          "Updates auth-reference.schema.prisma based better-auth.server.ts",
+        ],
       },
-    ],
+    ]),
   });
 
   if (codeGenMode === "e2e-tests") {

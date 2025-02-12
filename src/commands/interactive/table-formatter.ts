@@ -1,10 +1,15 @@
 import { CheckSettings } from "../check/check-list";
 import { stdout } from "process";
-import { checkList } from "../check/check-list";
 
 export interface Column {
   content: string;
   width: number;
+}
+
+export interface TableChoice<T = any> {
+  columns: string[];
+  value: T;
+  disabled?: boolean;
 }
 
 export function formatTableRow(
@@ -35,34 +40,44 @@ export function formatTableRow(
     .join(separator);
 }
 
-export function getMaxColumnWidths(checks: CheckSettings[]) {
-  return {
-    name: Math.max(...checks.map((check) => check.name.length)),
-    alias: Math.max(
-      ...checks.map((check) => {
-        const alias = getAliasString(check);
-        return alias ? `(${alias})`.length : 0;
-      }),
-    ),
-    description: Math.max(...checks.map((check) => check.description.length)),
-  };
+export function getMaxColumnWidths<T>(choices: TableChoice<T>[]): number[] {
+  const columnCount = Math.max(
+    ...choices.map((choice) => choice.columns.length),
+  );
+  const widths: number[] = [];
+
+  for (let i = 0; i < columnCount; i++) {
+    widths[i] = Math.max(
+      ...choices.map((choice) => (choice.columns[i] || "").length),
+    );
+  }
+
+  return widths;
 }
 
+export function formatChoices<T>(choices: TableChoice<T>[]): {
+  name: string;
+  value: T;
+  disabled?: boolean;
+}[] {
+  const terminalWidth = stdout.columns || 80;
+  const columnWidths = getMaxColumnWidths(choices);
+
+  return choices.map((choice) => ({
+    name: formatTableRow(
+      choice.columns.map((content, index) => ({
+        content,
+        width: columnWidths[index],
+      })),
+      terminalWidth,
+    ),
+    value: choice.value,
+    disabled: choice.disabled,
+  }));
+}
+
+// Legacy support for check formatting
 export function getAliasString(check: CheckSettings) {
   if (!check.alias) return "";
   return Array.isArray(check.alias) ? check.alias.join(", ") : check.alias;
-}
-
-export function formatCheckName(check: CheckSettings) {
-  const terminalWidth = stdout.columns || 80;
-  const alias = getAliasString(check);
-  const maxWidths = getMaxColumnWidths(checkList);
-
-  const columns: Column[] = [
-    { content: check.name, width: maxWidths.name },
-    { content: alias ? `(${alias})` : "", width: maxWidths.alias },
-    { content: check.description, width: maxWidths.description },
-  ];
-
-  return formatTableRow(columns, terminalWidth);
 }
