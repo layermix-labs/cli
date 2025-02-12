@@ -16,7 +16,6 @@ export async function processTemplate(
   data: Record<string, any>,
 ): Promise<string> {
   const template = fs.readFileSync(templatePath, "utf-8");
-  console.log("Rendering", templatePath, data);
   return ejs.render(template, data);
 }
 

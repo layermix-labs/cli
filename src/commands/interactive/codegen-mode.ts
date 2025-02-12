@@ -3,6 +3,7 @@ import { runCommand } from "../../utils/exec";
 import { formatChoices } from "./table-formatter";
 import { generateForm } from "../../generators/form";
 import { generatePage } from "../../generators/page";
+import enhanceWithAI from "./ai";
 
 export async function handleCodegenMode() {
   const codeGenMode = await select({
@@ -34,11 +35,13 @@ export async function handleCodegenMode() {
       const generatedFiles = await generateForm();
       console.log("\nGenerated files:");
       generatedFiles.forEach((file) => console.log(`- ${file}`));
+      await enhanceWithAI(generatedFiles);
       return;
     case "gen-page":
       const pageFiles = await generatePage();
       console.log("\nGenerated files:");
       pageFiles.forEach((file) => console.log(`- ${file}`));
+      await enhanceWithAI(pageFiles);
       return;
     case "e2e-tests":
       runCommand("npx playwright codegen localhost:5173");
