@@ -8,8 +8,11 @@ export async function handleCodegenMode() {
   const codeGenMode = await select({
     message: "What would you like to generate?",
     choices: formatChoices([
-      { value: "gen-form", columns: ["🧩 Functionality: Form + Schema"] },
-      { value: "gen-page", columns: ["📄 Page: Generate Page + Route"] },
+      {
+        value: "gen-form",
+        columns: ["🧩 Form", "Form + Schema + Action", "Page + Route"],
+      },
+      { value: "gen-page", columns: ["🧩 Page", "", "Route"] },
       {
         value: "e2e-tests",
         columns: [
