@@ -6,4 +6,7 @@ export default defineConfig({
   format: ["cjs"],
   clean: true,
   shims: true,
+  onSuccess: async () => {
+    // TODO: Copy templates to dist
+  },
 });
