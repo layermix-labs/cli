@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "bin": {
     "layermix": "./dist/index.js",
-    "biome": "./node_modules/.bin/biome",
+    "biome": "./node_modules/@biomejs/biome/bin/biome",
     "vitest": "./node_modules/.bin/vitest",
     "playwright": "./node_modules/.bin/playwright",
     "knip": "./node_modules/.bin/knip"
