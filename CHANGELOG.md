@@ -1,5 +1,11 @@
 # @layermix/cli
 
+## 0.0.5
+
+### Patch Changes
+
+- 08c1761: fix biome binary path
+
 ## 0.0.4
 
 ### Patch Changes
