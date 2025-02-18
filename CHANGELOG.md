@@ -1,5 +1,11 @@
 # @layermix/cli
 
+## 0.0.6
+
+### Patch Changes
+
+- 2377314: change dependencies to peer dependencies
+
 ## 0.0.5
 
 ### Patch Changes
