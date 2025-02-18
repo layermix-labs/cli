@@ -4,11 +4,7 @@
   "description": "CLI tool for layermix framework",
   "main": "dist/index.js",
   "bin": {
-    "layermix": "./dist/index.js",
-    "biome": "./node_modules/@biomejs/biome/bin/biome",
-    "vitest": "./node_modules/.bin/vitest",
-    "playwright": "./node_modules/.bin/playwright",
-    "knip": "./node_modules/.bin/knip"
+    "layermix": "./dist/index.js"
   },
   "license": "MIT",
   "scripts": {
@@ -19,22 +15,20 @@
     "@types/node": "^20.11.5",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
-    "@changesets/cli": "^2.27.1"
+    "@changesets/cli": "^2.27.1",
+    "@types/ejs": "^3.1.5"
   },
   "dependencies": {
-    "@biomejs/biome": "1.9.4",
     "@inquirer/prompts": "^7.3.1",
-    "@playwright/test": "1.50.1",
-    "@types/ejs": "^3.1.5",
-    "@vitest/browser": "3.0.5",
     "change-case": "^5.4.4",
     "commander": "^13.1.0",
-    "ejs": "^3.1.10",
-    "knip": "5.44.0",
-    "playwright": "1.50.1",
-    "vitest": "3.0.5",
-    "vitest-browser-react": "0.1.1",
-    "vitest-mock-extended": "^2.0.2"
+    "ejs": "^3.1.10"
+  },
+  "peerDependencies": {
+    "knip": "^5.44.0",
+    "playwright": "^1.50.1",
+    "vitest": "^3.0.5",
+    "@biomejs/biome": "^1.9.4"
   },
   "files": [
     "dist",
