@@ -1,5 +1,15 @@
 # @layermix/cli
 
+## 0.1.0
+
+### Minor Changes
+
+- eeea698: Documentation search as part of code gen
+
+### Patch Changes
+
+- 4f5f786: fix form template
+
 ## 0.0.7
 
 ### Patch Changes
