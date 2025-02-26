@@ -72,9 +72,9 @@ export default async function enhanceWithAI(filePaths: string[]) {
       // } else {
       //   console.log("No documentation files selected.");
       // }
-    // } else {
-      // console.log("No documentation files found in docs directory.");
-    // }
+    } else {
+      console.log("No documentation files found in docs directory.");
+    }
   } else {
     // Get search query for docs
     const searchQuery = message.substring(0, 200);
@@ -83,8 +83,10 @@ export default async function enhanceWithAI(filePaths: string[]) {
 
     if (relevantDocPaths.length > 0) {
       console.log("Found relevant documentation files:");
-      relevantDocPaths.forEach((path, index) => console.log(`${index + 1}. ${path}`));
-      
+      relevantDocPaths.forEach((path, index) =>
+        console.log(`${index + 1}. ${path}`),
+      );
+
       // Let user select which docs to include
       docPaths = await checkbox({
         message: "Select documentation files to include:",
