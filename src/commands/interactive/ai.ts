@@ -66,32 +66,43 @@ export default async function enhanceWithAI(filePaths: string[]) {
         })),
       });
 
-      if (docPaths.length > 0) {
-        console.log("Selected documentation files:");
-        docPaths.forEach((path) => console.log(`- ${path}`));
-      } else {
-        console.log("No documentation files selected.");
-      }
-    } else {
-      console.log("No documentation files found in docs directory.");
-    }
+      // if (docPaths.length > 0) {
+      //   console.log("Selected documentation files:");
+      //   docPaths.forEach((path) => console.log(`- ${path}`));
+      // } else {
+      //   console.log("No documentation files selected.");
+      // }
+    // } else {
+      // console.log("No documentation files found in docs directory.");
+    // }
   } else {
     // Get search query for docs
-    const searchQuery = await input({
-      message: "Enter a search query to find relevant documentation:",
-      default: message.substring(0, 200), // Use part of the message as default
-    });
+    const searchQuery = message.substring(0, 200);
+    console.log("Searching for relevant documentation...");
+    const relevantDocPaths = await searchDocs(searchQuery);
 
-    if (searchQuery.trim()) {
-      console.log("Searching for relevant documentation...");
-      docPaths = await searchDocs(searchQuery);
+    if (relevantDocPaths.length > 0) {
+      console.log("Found relevant documentation files:");
+      relevantDocPaths.forEach((path, index) => console.log(`${index + 1}. ${path}`));
+      
+      // Let user select which docs to include
+      docPaths = await checkbox({
+        message: "Select documentation files to include:",
+        choices: relevantDocPaths.map((file) => ({
+          name: file,
+          value: file,
+          checked: true, // Pre-check the relevant docs
+        })),
+      });
 
-      if (docPaths.length > 0) {
-        console.log("Found relevant documentation files:");
-        docPaths.forEach((path) => console.log(`- ${path}`));
-      } else {
-        console.log("No relevant documentation found.");
-      }
+      // if (docPaths.length > 0) {
+      //   console.log("Selected documentation files:");
+      //   docPaths.forEach((path) => console.log(`- ${path}`));
+      // } else {
+      //   console.log("No documentation files selected.");
+      // }
+    } else {
+      console.log("No relevant documentation found.");
     }
   }
 
