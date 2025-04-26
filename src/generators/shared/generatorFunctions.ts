@@ -158,3 +158,41 @@ export function generateFormRoute({
     outputFile: `../routes/${routeFile}`,
   });
 }
+
+export function generateUIComponent({
+  componentName,
+  domain,
+}: {
+  componentName: string;
+  domain: string;
+}) {
+  return prepareTemplate<{ componentName: string; domain: string }>({
+    data: {
+      componentName,
+      domain,
+    },
+    domain,
+    template: "ui-component.ejs",
+    templateRoot: "component",
+    outputFile: `components/${componentName}/${componentName}.tsx`,
+  });
+}
+
+export function generateUIComponentTest({
+  componentName,
+  domain,
+}: {
+  componentName: string;
+  domain: string;
+}) {
+  return prepareTemplate<{ componentName: string; domain: string }>({
+    data: {
+      componentName,
+      domain,
+    },
+    domain,
+    template: "ui-component-test.ejs",
+    templateRoot: "component",
+    outputFile: `components/${componentName}/${componentName}.test.tsx`,
+  });
+}

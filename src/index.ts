@@ -2,7 +2,6 @@
 
 import { Command } from "commander";
 import { CheckCommands } from "./commands/check";
-import { CodegenCommands } from "./commands/codegen";
 import { handleInteractiveMode } from "./commands/interactive";
 
 const program = new Command();
@@ -13,13 +12,10 @@ program
   .version("1.0.0");
 
 // Register command groups
-const commandRegistrars = [
-  new CheckCommands(),
-  new CodegenCommands(),
-];
+const commandRegistrars = [new CheckCommands()];
 
 // Register all commands
-commandRegistrars.forEach(registrar => registrar.register(program));
+commandRegistrars.forEach((registrar) => registrar.register(program));
 
 // Default action when no command is provided
 if (process.argv.length === 2) {

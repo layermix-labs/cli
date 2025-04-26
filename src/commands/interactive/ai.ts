@@ -111,10 +111,22 @@ export default async function enhanceWithAI(filePaths: string[]) {
   try {
     // Combine code files and doc files for aider
     const allPaths = [...filePaths, ...docPaths];
-    const command = `aider --no-auto-commits --no-gitignore --message "${message}" ${allPaths.join(" ")}`;
+    const command = `aider --no-auto-commits --no-gitignore --message "${escapeShellArg(message)}" ${allPaths.join(" ")}`;
     console.log("Running aider with enhanced context...");
     execSync(command, { stdio: "inherit" });
   } catch (error) {
     console.error("Failed to run aider:", error);
   }
+}
+
+// Escape the message for shell usage
+function escapeShellArg(message: string) {
+  // Replace newlines with actual escaped newlines
+  const escapedMessage = message
+    .replace(/\\/g, "\\\\") // Escape backslashes first
+    .replace(/"/g, '\\"') // Escape double quotes
+    .replace(/\$/g, "\\$") // Escape dollar signs
+    .replace(/`/g, "\\`"); // Escape backticks
+
+  return escapedMessage;
 }

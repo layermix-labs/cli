@@ -36,3 +36,8 @@ The system will automatically generate and cache embeddings in `docs/_embeddings
 - For automatic documentation search using vector embeddings, you need an OpenAI API key.
 - Set the `OPENAI_API_KEY` environment variable before running the CLI.
 - If no API key is available, you can still manually select documentation files to include.
+
+# TODO Commands:
+
+ - Make sure multi line strings from editor are correctly passed to the CLI of Aider
+ - Generate just a component with tests

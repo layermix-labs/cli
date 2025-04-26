@@ -14,6 +14,7 @@ export default defineConfig({
     const templateDirs = [
       "generators/form/templates",
       "generators/page/templates",
+      "generators/component/templates",
       // Add other template directories here as needed
     ];
 
