@@ -37,7 +37,4 @@ The system will automatically generate and cache embeddings in `docs/_embeddings
 - Set the `OPENAI_API_KEY` environment variable before running the CLI.
 - If no API key is available, you can still manually select documentation files to include.
 
-# TODO Commands:
-
- - Make sure multi line strings from editor are correctly passed to the CLI of Aider
- - Generate just a component with tests
+## Making a new release
