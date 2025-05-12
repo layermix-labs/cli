@@ -1,5 +1,11 @@
 # @layermix/cli
 
+## 0.2.1
+
+### Patch Changes
+
+- 4513e41: Better terminal viewing experience when there are a lot of options.
+
 ## 0.2.0
 
 ### Minor Changes
