@@ -18,6 +18,7 @@ export async function handleChecksMode() {
   const selected = await checkbox({
     message: "Select checks to run",
     choices: formatChoices(choices),
+    pageSize: 99,
   });
 
   executeChecks(selected);

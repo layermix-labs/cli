@@ -38,3 +38,9 @@ The system will automatically generate and cache embeddings in `docs/_embeddings
 - If no API key is available, you can still manually select documentation files to include.
 
 ## Making a new release
+
+1. Run `yarn changeset` to create a new changeset
+2. Commit changes
+3. Open a new PR
+4. Merge the PR
+5. New PR will be open, merge that one as well

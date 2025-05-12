@@ -1,4 +1,4 @@
-import { confirm, editor, input, checkbox } from "@inquirer/prompts";
+import { confirm, editor, checkbox } from "@inquirer/prompts";
 import { execSync } from "child_process";
 import {
   searchDocs,
@@ -34,6 +34,7 @@ export default async function enhanceWithAI(filePaths: string[]) {
     message: "How would you like to augment the generated code?",
     postfix: ".md",
     validate: (value) => value.trim().length > 0,
+    waitForUseInput: false,
   });
 
   if (!message?.trim()) {
@@ -64,6 +65,7 @@ export default async function enhanceWithAI(filePaths: string[]) {
           name: file,
           value: file,
         })),
+        pageSize: 99,
       });
 
       // if (docPaths.length > 0) {
@@ -95,6 +97,7 @@ export default async function enhanceWithAI(filePaths: string[]) {
           value: file,
           checked: true, // Pre-check the relevant docs
         })),
+        pageSize: 99,
       });
 
       // if (docPaths.length > 0) {
