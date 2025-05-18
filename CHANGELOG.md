@@ -1,5 +1,11 @@
 # @layermix/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- f54e207: biome 2.0 upgrade
+
 ## 0.2.1
 
 ### Patch Changes
