@@ -83,11 +83,11 @@ export const checkList: CheckSettings[] = [
     subChecks: [],
     action: () =>
       runCommand(
-        "biome check --formatter-enabled=false --linter-enabled=false --organize-imports-enabled=true --write",
+        "biome check --formatter-enabled=false --linter-enabled=false --write",
       ),
     actionCi: () =>
       runCommand(
-        "biome check --formatter-enabled=false --linter-enabled=false --organize-imports-enabled=true",
+        "biome check --formatter-enabled=false --linter-enabled=false",
       ),
   },
   {
