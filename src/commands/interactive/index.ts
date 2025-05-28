@@ -87,7 +87,7 @@ export async function handleInteractiveMode() {
       await enhanceWithAI(generatedFiles2);
       return;
     case "prisma-db-reset":
-      runCommand("pnpm prisma db reset");
+      runCommand("pnpm prisma migrate reset");
       return;
     case "checks":
       await handleChecksMode();
