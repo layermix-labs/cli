@@ -1,5 +1,18 @@
 # @layermix/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- 26bd471: The last command you will run will be stored.
+  The next time you run in interactive mode the new option will appear, allowing you to rerun the command.
+
+  Now the playwright debug option asks you for the file you want to debug.
+
+### Patch Changes
+
+- 9e81e35: fix prisma db reset
+
 ## 0.3.0
 
 ### Minor Changes
