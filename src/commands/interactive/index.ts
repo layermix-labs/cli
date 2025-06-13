@@ -6,6 +6,7 @@ import { generatePage } from "../../generators/page";
 import { runCommand } from "../../utils/exec";
 import enhanceWithAI from "./ai";
 import generateComponent from "../../generators/component";
+import { playwrightDebug } from "./playwright-debug";
 
 export async function handleInteractiveMode() {
   const mode = await select({
@@ -105,7 +106,7 @@ export async function handleInteractiveMode() {
       runCommand("pnpm inlang machine translate --project project.inlang");
       return;
     case "e2e-debug":
-      runCommand("pnpm playwright test --debug");
+      await playwrightDebug();
       return;
     case "gen-form":
       const generatedFiles = await generateForm();
