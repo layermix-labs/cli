@@ -1,3 +1,4 @@
+// @ts-expect-error This works, so not sure why typescript is complaining
 import Conf from "conf";
 
 // The type for the config store
