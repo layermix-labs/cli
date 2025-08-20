@@ -124,9 +124,6 @@ export async function handleInteractiveMode() {
     case "prisma-seed":
       runCommand("pnpm prisma db seed");
       return;
-    case "translations":
-      runCommand("pnpm inlang machine translate --project project.inlang");
-      return;
     case "e2e-debug":
       await playwrightDebug();
       return;

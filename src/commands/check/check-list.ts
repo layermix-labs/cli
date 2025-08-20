@@ -89,12 +89,5 @@ export const checkList: CheckSettings[] = [
       runCommand(
         "biome check --formatter-enabled=false --linter-enabled=false",
       ),
-  },
-  {
-    name: "check:translations",
-    description: "Runs inlang translations validation",
-    subChecks: [],
-    action: () => runCommand("inlang validate --project project.inlang"),
-    actionCi: () => runCommand("inlang validate --project project.inlang"),
-  },
+  }
 ];
