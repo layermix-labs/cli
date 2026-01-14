@@ -16,6 +16,7 @@
     "chalk": "4",
     "commander": "^14.0.2",
     "cosmiconfig": "^9.0.0",
+    "execa": "^9.6.1",
     "graph-data-structure": "^4.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",

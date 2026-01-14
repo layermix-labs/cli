@@ -75,4 +75,24 @@ export class TaskGraph {
   getTasks(): Record<string, Task> {
     return this.tasks;
   }
+
+  getTask(id: string): Task | undefined {
+    return this.tasks[id];
+  }
+
+  getAllDependencies(taskId: string): Set<string> {
+    const dependencies = new Set<string>();
+    const visit = (id: string) => {
+      const task = this.tasks[id];
+      if (!task) return;
+      for (const depId of task.dependsOn) {
+        if (!dependencies.has(depId)) {
+          dependencies.add(depId);
+          visit(depId);
+        }
+      }
+    };
+    visit(taskId);
+    return dependencies;
+  }
 }
