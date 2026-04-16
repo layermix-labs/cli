@@ -1,162 +1,270 @@
 import { EventEmitter } from 'events';
 import os from 'os';
+import path from 'path';
 import { TaskGraph } from './task-graph.js';
 import { TaskRunner, TaskStatus } from './task-runner.js';
 
 export interface ExecutorOptions {
   concurrency?: number;
   dryRun?: boolean;
+  globalEnv?: Record<string, string>;
+  rootDir?: string;
+}
+
+export interface ResolvedTask {
+  id: string;
+  cmd: string;
+  cwd: string;
+  env: Record<string, string>;
+  dependsOn: string[];
+  dependencies: string[];
+  tags: string[];
 }
 
 export interface ExecutionPlan {
+  root: string;
   executionPlan: string[][];
+  tasks: Record<string, ResolvedTask>;
 }
 
 export class Executor extends EventEmitter {
   private taskRunners: Map<string, TaskRunner> = new Map();
   private concurrency: number;
+  
+  // State
+  private pending = new Set<string>();
+  private completed = new Set<string>();
+  private failed = new Set<string>();
+  private skipped = new Set<string>();
+  private running = new Map<string, Promise<void>>();
+  
+  private isProcessing = false;
+  private processQueuePromise: Promise<void> | null = null;
 
   constructor(private graph: TaskGraph, private options: ExecutorOptions = {}) {
     super();
     this.concurrency = options.concurrency || os.cpus().length;
   }
 
+  /**
+   * Starts a full execution of the graph (or subgraph).
+   * Returns a promise that resolves when the queue is drained.
+   */
   async execute(targetTaskIds?: string[], tag?: string): Promise<boolean> {
-    const tasksToRun = this.identifyTasks(targetTaskIds, tag);
-    
     if (this.options.dryRun) {
-        // For dry run, we just emit the plan or return it?
-        // The requirement says "Output a JSON structure".
-        // We can just construct the plan and maybe emit a special event or just return it?
-        // But the method signature returns Promise<boolean> (success/fail).
-        // Let's print via console.log for CLI? Or return the plan?
-        // Let's implement a separate method for getting the plan, or just do it here.
-        // The requirements say "Implement the --dry-run-json flag".
+        // Dry run implementation as before
         return true;
     }
+
+    const tasksToRun = this.identifyTasks(targetTaskIds, tag);
+    
+    // Initialize/Reset state
+    this.pending = new Set(tasksToRun);
+    this.completed.clear();
+    this.failed.clear();
+    this.skipped.clear();
+    this.running.clear();
+    this.taskRunners.clear();
 
     // Initialize runners
     for (const taskId of tasksToRun) {
       const task = this.graph.getTask(taskId);
       if (task) {
-        this.taskRunners.set(taskId, new TaskRunner(task));
-      }
-    }
-
-    const pending = new Set(tasksToRun);
-    const completed = new Set<string>(); // Success only
-    const failed = new Set<string>();
-    const skipped = new Set<string>();
-    const running = new Map<string, Promise<void>>();
-
-    // Loop until all done
-    while (pending.size > 0 || running.size > 0) {
-      // Check for ready tasks
-      const ready: string[] = [];
-      for (const taskId of pending) {
-        const task = this.graph.getTask(taskId)!;
-        
-        // Check dependencies
-        const allDepsMet = task.dependsOn.every(depId => completed.has(depId));
-        const anyDepFailed = task.dependsOn.some(depId => failed.has(depId) || skipped.has(depId));
-
-        if (anyDepFailed) {
-            // Skip this task
-            skipped.add(taskId);
-            pending.delete(taskId);
-            const runner = this.taskRunners.get(taskId);
-            if (runner) {
-                runner.skip();
-                this.emit('taskSkipped', taskId);
-            }
-        } else if (allDepsMet) {
-            ready.push(taskId);
-        }
-      }
-
-      // Schedule ready tasks
-      for (const taskId of ready) {
-        if (running.size >= this.concurrency) break;
-        
-        pending.delete(taskId);
-        const runner = this.taskRunners.get(taskId)!;
-        
-        this.emit('taskStart', taskId);
-        
-        const promise = runner.execute().then(() => {
-          completed.add(taskId);
-          this.emit('taskSuccess', taskId, runner.output);
-        }).catch((err) => {
-          failed.add(taskId);
-          this.emit('taskFail', taskId, err, runner.output);
-        }).finally(() => {
-          running.delete(taskId);
+        const runner = new TaskRunner(task);
+        runner.on('output', (data) => {
+            this.emit('taskOutput', taskId, data);
         });
-
-        running.set(taskId, promise);
-      }
-
-      // If nothing running and pending is not empty but no ready tasks -> Circular dependency or bug? 
-      if (running.size === 0 && pending.size > 0) {
-          break;
-      }
-
-      if (running.size > 0) {
-        // Wait for at least one to finish
-        await Promise.race(running.values());
+        this.taskRunners.set(taskId, runner);
       }
     }
 
-    return failed.size === 0;
+    await this.processQueue();
+    
+    return this.failed.size === 0;
+  }
+
+  /**
+   * Retries a specific task and its dependents.
+   * Resets their state and resumes execution.
+   */
+  async retry(taskId: string) {
+      // 1. Identify all downstream dependents
+      const dependents = this.graph.getAllDependents(taskId);
+      const toReset = new Set([taskId, ...dependents]);
+      
+      // 2. Reset state for these tasks
+      for (const id of toReset) {
+          // Only reset if we are tracking this task (it was part of initial set)
+          // If a dependent wasn't part of the initial run (e.g. partial run), we might check.
+          // But identifyTasks includes dependencies, not dependents. 
+          // If we ran a partial graph, dependents might not be in taskRunners.
+          // If they are not in taskRunners, we don't need to run them (unless we want to expand the graph? No, let's stick to current scope).
+          
+          if (this.taskRunners.has(id)) {
+              const runner = this.taskRunners.get(id);
+              if (runner) runner.reset();
+              
+              this.completed.delete(id);
+              this.failed.delete(id);
+              this.skipped.delete(id);
+              // Remove from running? Should not be running if we are retrying (usually called when idle).
+              if (this.running.has(id)) {
+                  // This is tricky. If we retry while running, we might have issues.
+                  // Assume retry is called when things are settled or on failed tasks.
+              }
+              
+              this.pending.add(id);
+              this.emit('taskReset', id);
+          }
+      }
+      
+      // 3. Trigger processing
+      this.emit('retry', taskId);
+      await this.processQueue();
+  }
+
+  private async processQueue() {
+      // If already processing, wait for it? 
+      // Or just join the existing loop?
+      if (this.isProcessing && this.processQueuePromise) {
+          return this.processQueuePromise;
+      }
+
+      this.isProcessing = true;
+      
+      this.processQueuePromise = (async () => {
+          try {
+            while (this.pending.size > 0 || this.running.size > 0) {
+                // Check for ready tasks
+                const ready: string[] = [];
+                // We iterate over a copy of pending to avoid modification issues during iteration
+                const currentPending = Array.from(this.pending);
+                
+                for (const taskId of currentPending) {
+                    const task = this.graph.getTask(taskId)!;
+                    
+                    // Check dependencies
+                    // A dependency is met if it is in 'completed'.
+                    // Note: If a dependency was NOT in the initial set to run, we assume it's met?
+                    // No, `identifyTasks` adds all upstream dependencies to the set.
+                    // So we can assume all dependencies are tracked.
+                    
+                    const allDepsMet = task.dependsOn.every(depId => this.completed.has(depId));
+                    const anyDepFailed = task.dependsOn.some(depId => this.failed.has(depId) || this.skipped.has(depId));
+
+                    if (anyDepFailed) {
+                        this.skipped.add(taskId);
+                        this.pending.delete(taskId);
+                        const runner = this.taskRunners.get(taskId);
+                        if (runner) {
+                            runner.skip();
+                            this.emit('taskSkipped', taskId);
+                        }
+                    } else if (allDepsMet) {
+                        ready.push(taskId);
+                    }
+                }
+
+                // Schedule ready tasks
+                for (const taskId of ready) {
+                    if (this.running.size >= this.concurrency) break;
+                    
+                    this.pending.delete(taskId);
+                    const runner = this.taskRunners.get(taskId)!;
+                    
+                    this.emit('taskStart', taskId);
+                    
+                    const promise = runner.execute().then(() => {
+                        this.completed.add(taskId);
+                        this.emit('taskSuccess', taskId, runner.output);
+                    }).catch((err) => {
+                        this.failed.add(taskId);
+                        this.emit('taskFail', taskId, err, runner.output);
+                    }).finally(() => {
+                        this.running.delete(taskId);
+                    });
+
+                    this.running.set(taskId, promise);
+                }
+
+                // Break if stuck (pending tasks but none running and none ready)
+                if (this.running.size === 0 && this.pending.size > 0) {
+                     // Check if any pending tasks can proceed? 
+                     // If we are here, it means no tasks became ready in this pass.
+                     // This implies unmet dependencies that are not failed/skipped yet?
+                     // Or circular, but validation handles that.
+                     // It might mean dependencies are missing from the graph tracking?
+                     // But identifyTasks ensures closure.
+                     // Break to avoid infinite loop.
+                     break;
+                }
+
+                if (this.running.size > 0) {
+                    // Wait for at least one to finish
+                    await Promise.race(this.running.values());
+                }
+            }
+          } finally {
+              this.isProcessing = false;
+              this.processQueuePromise = null;
+          }
+      })();
+      
+      return this.processQueuePromise;
   }
 
   getDryRunJson(targetTaskIds?: string[], tag?: string): ExecutionPlan {
       const tasksToRun = this.identifyTasks(targetTaskIds, tag);
       const subGraphTasks: Record<string, any> = {};
-      
-      // Build a mini-graph of only the tasks to run
+
       for (const id of tasksToRun) {
           subGraphTasks[id] = this.graph.getTask(id)!;
       }
-      
-      // We can use the TaskGraph logic but restricted to these tasks.
-      // Or we can just calculate layers manually.
-      // Let's compute layers.
-      
+
       const layers: string[][] = [];
       let currentSet = new Set(tasksToRun);
-      
+
       while (currentSet.size > 0) {
           const layer: string[] = [];
           const nextSet = new Set(currentSet);
-          
+
           for (const taskId of currentSet) {
               const task = subGraphTasks[taskId];
-              // Check if all dependencies (that are also in the set) are satisfied (actually, we want tasks with NO dependencies in the current set)
-              // Wait, topological sort layers:
-              // Layer 0: Tasks with no dependencies within the set.
-              // Remove them, repeat.
-              
               const dependsOnInSet = task.dependsOn.filter((d: string) => currentSet.has(d));
               if (dependsOnInSet.length === 0) {
                   layer.push(taskId);
               }
           }
-          
-          if (layer.length === 0) {
-               // Cycle? Should be caught earlier.
-               break;
-          }
-          
+
+          if (layer.length === 0) break;
+
           layers.push(layer);
           layer.forEach(id => nextSet.delete(id));
           currentSet = nextSet;
       }
-      
-      return { executionPlan: layers };
+
+      const rootDir = this.options.rootDir || process.cwd();
+      const globalEnv = this.options.globalEnv || {};
+      const resolved: Record<string, ResolvedTask> = {};
+
+      for (const id of tasksToRun) {
+          const task = subGraphTasks[id];
+          const deps = Array.from(this.graph.getAllDependencies(id));
+          resolved[id] = {
+              id,
+              cmd: task.cmd,
+              cwd: path.resolve(rootDir, task.cwd || '.'),
+              env: { ...globalEnv, ...(task.env || {}) },
+              dependsOn: task.dependsOn,
+              dependencies: deps,
+              tags: task.tags,
+          };
+      }
+
+      return { root: rootDir, executionPlan: layers, tasks: resolved };
   }
 
-  private identifyTasks(targetTaskIds?: string[], tag?: string): Set<string> {
+  public identifyTasks(targetTaskIds?: string[], tag?: string): Set<string> {
     const tasks = this.graph.getTasks();
     const result = new Set<string>();
 
@@ -169,14 +277,12 @@ export class Executor extends EventEmitter {
         .filter(t => t.tags.includes(tag))
         .map(t => t.id);
     } else {
-      // All tasks
       seeds = Object.keys(tasks);
     }
 
     for (const seed of seeds) {
-      if (!tasks[seed]) continue; // or throw
+      if (!tasks[seed]) continue;
       result.add(seed);
-      // Add dependencies
       const deps = this.graph.getAllDependencies(seed);
       deps.forEach(d => result.add(d));
     }

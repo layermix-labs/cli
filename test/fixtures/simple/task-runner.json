@@ -1,0 +1,10 @@
+{
+  "tasks": [
+    { "id": "a", "cmd": "echo hello-a", "dependsOn": [], "tags": ["greet"] },
+    { "id": "b", "cmd": "echo hello-b", "dependsOn": ["a"], "tags": ["greet"] },
+    { "id": "c", "cmd": "echo hello-c", "dependsOn": [], "tags": ["other"] }
+  ],
+  "env": {
+    "GREETING": "hi"
+  }
+}

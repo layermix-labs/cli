@@ -17,14 +17,6 @@ Finalize the project by ensuring it meets the "AI Friendly" mandates, adding com
 - **Structured Error Logs:**
     - If `CI=true` or a specific flag is set, ensure that errors are printed in a parseable format (standard JSON block at the end of output) so an Agent can read *exactly* what failed without guessing.
 
-### 3. End-to-End Tests
-- Create a `tests/e2e` directory.
-- Create dummy projects with `task-runner.json`.
-- Test scenarios:
-    - **Cycle Detection:** Ensure it errors out.
-    - **Parallelism:** Ensure independent tasks run together (check timestamps).
-    - **Failure Cascading:** Ensure dependent tasks do not run if parent fails.
-
 ### 4. Documentation & Examples
 - Write a `README.md` specifically targeting two audiences:
     1.  **Humans:** How to set up, use the TUI, use the config.

@@ -1,9 +1,10 @@
+import { EventEmitter } from 'events';
 import { execa, ExecaChildProcess } from 'execa';
 import { Task } from '../types/config.js';
 
 export type TaskStatus = 'IDLE' | 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'SKIPPED';
 
-export class TaskRunner {
+export class TaskRunner extends EventEmitter {
   private _status: TaskStatus = 'IDLE';
   private _stdout: string[] = [];
   private _stderr: string[] = [];
@@ -11,7 +12,9 @@ export class TaskRunner {
   private _endTime: number | null = null;
   private process: ExecaChildProcess | null = null;
 
-  constructor(public readonly task: Task) {}
+  constructor(public readonly task: Task) {
+    super();
+  }
 
   get status(): TaskStatus {
     return this._status;
@@ -62,13 +65,17 @@ export class TaskRunner {
 
       if (this.process.stdout) {
         this.process.stdout.on('data', (chunk) => {
-          this._stdout.push(chunk.toString().trimEnd());
+          const text = chunk.toString().trimEnd();
+          this._stdout.push(text);
+          this.emit('output', text);
         });
       }
 
       if (this.process.stderr) {
         this.process.stderr.on('data', (chunk) => {
-          this._stderr.push(chunk.toString().trimEnd());
+          const text = chunk.toString().trimEnd();
+          this._stderr.push(text);
+          this.emit('output', text); // We treat stderr as output too for streaming
         });
       }
 
@@ -82,6 +89,7 @@ export class TaskRunner {
       // However, ensure we log the error message if it wasn't in stderr
       if (!this._stderr.length && error.message) {
         this._stderr.push(error.message);
+        this.emit('output', error.message);
       }
       throw error;
     } finally {
@@ -92,5 +100,20 @@ export class TaskRunner {
 
   skip() {
     this._status = 'SKIPPED';
+  }
+
+  reset() {
+    this._status = 'IDLE';
+    this._startTime = null;
+    this._endTime = null;
+    this._stdout = [];
+    this._stderr = [];
+    // If process is running, we should kill it?
+    // Usually reset() is called on failed/done tasks. 
+    // If it's running, we assume the caller handled stopping it or we force kill.
+    if (this.process) {
+      this.process.kill();
+      this.process = null;
+    }
   }
 }

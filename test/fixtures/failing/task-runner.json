@@ -1,0 +1,8 @@
+{
+  "tasks": [
+    { "id": "ok", "cmd": "echo ok", "dependsOn": [], "tags": [] },
+    { "id": "bad", "cmd": "exit 1", "dependsOn": ["ok"], "tags": [] },
+    { "id": "downstream", "cmd": "echo never", "dependsOn": ["bad"], "tags": [] }
+  ],
+  "env": {}
+}

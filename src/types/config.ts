@@ -13,6 +13,7 @@ export const TaskSchema = z.object({
 export type Task = z.infer<typeof TaskSchema>;
 
 export const ConfigSchema = z.object({
+  $schema: z.string().optional(),
   tasks: z.array(TaskSchema),
   env: z.object({}).catchall(z.string()).optional().default({}),
 });

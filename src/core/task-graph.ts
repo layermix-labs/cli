@@ -95,4 +95,21 @@ export class TaskGraph {
     visit(taskId);
     return dependencies;
   }
+
+  getAllDependents(taskId: string): Set<string> {
+    const dependents = new Set<string>();
+    const visit = (id: string) => {
+      // Get direct dependents (nodes where edge is id -> dependent)
+      // Since we added edges as dep -> task, adjacent(id) gives tasks depending on id.
+      const adjacent = this.graph.adjacent(id);
+      for (const nextId of adjacent) {
+        if (!dependents.has(nextId)) {
+          dependents.add(nextId);
+          visit(nextId);
+        }
+      }
+    };
+    visit(taskId);
+    return dependents;
+  }
 }
