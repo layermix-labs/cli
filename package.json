@@ -1,15 +1,42 @@
 {
-	"name": "my-runner",
-	"version": "0.1.0",
+	"name": "@layermix/cli",
+	"version": "1.0.0",
 	"description": "DAG-based task runner CLI with Ink TUI",
 	"type": "module",
 	"bin": {
-		"my-runner": "dist/cli/index.js"
+		"layermix": "dist/cli/index.js"
 	},
 	"files": [
 		"dist",
 		"schema.json",
-		"README.md"
+		"README.md",
+		"LICENSE"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"license": "MIT",
+	"author": "Layermix",
+	"homepage": "https://github.com/layermix-labs/cli#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/layermix-labs/cli.git"
+	},
+	"bugs": {
+		"url": "https://github.com/layermix-labs/cli/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"keywords": [
+		"task-runner",
+		"dag",
+		"cli",
+		"tui",
+		"ink",
+		"monorepo",
+		"build",
+		"ci"
 	],
 	"scripts": {
 		"start": "vite-node src/cli/index.tsx",
@@ -31,11 +58,11 @@
 		"fallow:dead": "fallow dead-code",
 		"fallow:dupes": "fallow dupes",
 		"fallow:health": "fallow health",
-		"audit": "fallow audit"
+		"audit": "fallow audit",
+		"changeset": "changeset",
+		"version": "changeset version",
+		"release": "changeset publish"
 	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
 	"packageManager": "pnpm@10.5.2",
 	"dependencies": {
 		"ansi-regex": "^6.2.2",
@@ -55,7 +82,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.12",
-		"@fallow-cli/darwin-arm64": "^2.38.0",
+		"@changesets/cli": "^2.27.10",
 		"@types/clipboardy": "^2.0.4",
 		"@types/cosmiconfig": "^6.0.3",
 		"@types/node": "^25.0.8",
@@ -65,6 +92,9 @@
 		"tsx": "^4.21.0",
 		"vite-node": "^5.2.0",
 		"vitest": "^4.0.17"
+	},
+	"optionalDependencies": {
+		"@fallow-cli/darwin-arm64": "^2.38.0"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

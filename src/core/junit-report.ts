@@ -37,7 +37,7 @@ function cdata(s: string): string {
 
 function buildJUnitXml(
 	results: JUnitTaskResult[],
-	suiteName = "my-runner",
+	suiteName = "layermix",
 ): string {
 	const total = results.length;
 	const failures = results.filter((r) => r.status === "failure").length;
@@ -83,7 +83,7 @@ ${cases}
 export function writeJUnitReport(
 	filePath: string,
 	results: JUnitTaskResult[],
-	suiteName = "my-runner",
+	suiteName = "layermix",
 ): string {
 	const xml = buildJUnitXml(results, suiteName);
 	const abs = path.isAbsolute(filePath)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`my-runner` — DAG-based task runner CLI. TypeScript + Node (ESM, `NodeNext`). Configured via `task-runner.json` (zod-validated). Runs via Ink TUI in a TTY, linear buffered output otherwise. Project is scaffolded per `INSTRUCTIONS-1.md` → `INSTRUCTIONS-5.md` (treat those as spec).
+`@layermix/cli` — DAG-based task runner CLI (binary: `layermix`). TypeScript + Node (ESM, `NodeNext`). Configured via `task-runner.json` (zod-validated). Runs via Ink TUI in a TTY, linear buffered output otherwise. Project is scaffolded per `INSTRUCTIONS-1.md` → `INSTRUCTIONS-5.md` (treat those as spec).
 
 ## Commands
 
@@ -19,7 +19,7 @@ Package manager: **pnpm**. Entry runs via `vite-node` (no prebuild).
 
 No `build`, `lint`, or `typecheck` script in `package.json`. `tsc` only via the sample `task-runner.json` tasks — not for compiling the CLI itself. `dist/` in git is stale output, not the runtime path.
 
-CLI subcommands (see `src/cli/index.tsx`): `list`, `validate`, `init`, `run [taskIds...]` (default — `my-runner [args]` is the same as `my-runner run [args]`). `run` flags: `-t <tag>`, `--dry-run-json`, `--concurrency <n>`, `--output-only-failed`, `--ci`, `--ai`, `--junit <path>`. `init` also accepts `--force` to overwrite an existing `task-runner.json`. The previous `interactive` (checkbox selection) command was removed; there is no checkbox UI anymore — pass task ids or `-t <tag>` directly. The old `--no-tui` flag was removed — `--ci` / `--ai` are the ways to force linear mode.
+CLI subcommands (see `src/cli/index.tsx`): `list`, `validate`, `init`, `run [taskIds...]` (default — `layermix [args]` is the same as `layermix run [args]`). `run` flags: `-t <tag>`, `--dry-run-json`, `--concurrency <n>`, `--output-only-failed`, `--ci`, `--ai`, `--junit <path>`. `init` also accepts `--force` to overwrite an existing `task-runner.json`. The previous `interactive` (checkbox selection) command was removed; there is no checkbox UI anymore — pass task ids or `-t <tag>` directly. The old `--no-tui` flag was removed — `--ci` / `--ai` are the ways to force linear mode.
 
 ## Architecture
 

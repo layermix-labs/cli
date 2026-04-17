@@ -193,7 +193,7 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 const program = new Command();
 
 program
-	.name("my-runner")
+	.name("layermix")
 	.description("A simple DAG-based task runner")
 	.version("1.0.0");
 
@@ -393,7 +393,7 @@ program
 			if (!hasExplicitTarget && !ciMode) {
 				console.log(
 					chalk.yellow(
-						"No tasks specified. Pass task ids or -t <tag>, or run `my-runner list` to see available tasks.",
+						"No tasks specified. Pass task ids or -t <tag>, or run `layermix list` to see available tasks.",
 					),
 				);
 				return;

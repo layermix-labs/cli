@@ -1,2 +1,7 @@
 node_modules/
 dist/
+.fallow/
+*.tgz
+.DS_Store
+junit.xml
+task-runner-test.json

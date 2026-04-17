@@ -33,7 +33,7 @@ async function withJunitTempDir<T>(
 	relative: string,
 	run: (junitPath: string) => Promise<T>,
 ): Promise<T> {
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "layermix-junit-"));
 	try {
 		return await run(path.join(tmp, relative));
 	} finally {
@@ -219,7 +219,7 @@ describe("CLI e2e", () => {
 	});
 
 	it("init writes a task-runner.json with $schema reference", async () => {
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-init-"));
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "layermix-init-"));
 		try {
 			const res = await runCli(["init"], tmp);
 			expect(res.exitCode).toBe(0);
@@ -235,7 +235,7 @@ describe("CLI e2e", () => {
 	});
 
 	it("init refuses to overwrite without --force", async () => {
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-init-"));
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "layermix-init-"));
 		try {
 			fs.writeFileSync(path.join(tmp, "task-runner.json"), '{"tasks":[]}');
 			const res = await runCli(["init"], tmp);
