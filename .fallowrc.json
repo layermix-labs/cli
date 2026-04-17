@@ -11,6 +11,7 @@
 		"getTask",
 		"getAllDependencies",
 		"getAllDependents",
-		"retry"
+		"retry",
+		"retryFailed"
 	]
 }

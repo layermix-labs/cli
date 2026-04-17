@@ -15,6 +15,10 @@ interface TaskDetailProps {
 	description?: string;
 	cmd?: string;
 	fullscreen?: boolean;
+	// When true, App is in search mode — this pane must stop consuming input
+	// so typed characters build the query instead of triggering shortcuts
+	// like `r` (Run) or `c` (Copy Logs).
+	inputLocked?: boolean;
 	onRun?: () => void;
 	onRunWithDeps?: () => void;
 	onRetry?: () => void;
@@ -226,6 +230,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	description,
 	cmd,
 	fullscreen = false,
+	inputLocked = false,
 	onRun,
 	onRunWithDeps,
 	onRetry,
@@ -400,28 +405,31 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		return false;
 	};
 
-	useInput((input, key) => {
-		if (tryHandleScroll(input, key)) return;
+	useInput(
+		(input, key) => {
+			if (tryHandleScroll(input, key)) return;
 
-		if (input === "f" || (fullscreen && input === "q")) {
-			onToggleFullscreen?.();
-			return;
-		}
+			if (input === "f" || (fullscreen && input === "q")) {
+				onToggleFullscreen?.();
+				return;
+			}
 
-		// Footer nav + activation are non-fullscreen only.
-		if (fullscreen) return;
+			// Footer nav + activation are non-fullscreen only.
+			if (fullscreen) return;
 
-		if (tryShortcut(input)) return;
+			if (tryShortcut(input)) return;
 
-		handleFooterNavInput(
-			input,
-			key,
-			options,
-			selectedOption,
-			setSelectedOption,
-			activateChoice,
-		);
-	});
+			handleFooterNavInput(
+				input,
+				key,
+				options,
+				selectedOption,
+				setSelectedOption,
+				activateChoice,
+			);
+		},
+		{ isActive: !inputLocked },
+	);
 
 	// Mouse wheel scrolling — 3 lines per tick (standard OS convention).
 	useMouseWheel((dir) => {

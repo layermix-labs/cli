@@ -1,6 +1,6 @@
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, type Key, Text, useApp, useInput } from "ink";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Executor } from "../../core/executor.js";
 import type { Task } from "../../types/config.js";
 import Kbd from "./Kbd.js";
@@ -47,65 +47,98 @@ const topBarDividerLine = (columns: number, showSidebarTee: boolean) => {
 };
 
 // ─── Top bar ────────────────────────────────────────────────────────────────
+// The legend is built from an array so the TaskDetail / TagDetail / Overview
+// variants don't each duplicate the same "nav · select · search · quit" chain
+// of <Kbd> + <Text dimColor> fragments.
+type Hint = [string, string];
+
+const HintList: React.FC<{ hints: Hint[] }> = ({ hints }) => (
+	<>
+		{hints.map(([k, label], i) => (
+			<Fragment key={k}>
+				<Kbd k={k} />
+				<Text dimColor>{` ${label}${i < hints.length - 1 ? " · " : ""}`}</Text>
+			</Fragment>
+		))}
+	</>
+);
+
+const NAV_HINT: Hint = ["↑↓", "nav"];
+const MENU_HINT: Hint = ["←→", "menu"];
+const ENTER_HINT: Hint = ["Enter", "select"];
+const SEARCH_HINT: Hint = ["/", "search"];
+const QUIT_HINT: Hint = ["q", "quit"];
+
+const TASK_HINTS: Hint[] = [
+	NAV_HINT,
+	MENU_HINT,
+	ENTER_HINT,
+	SEARCH_HINT,
+	["f", "fullscreen"],
+	QUIT_HINT,
+];
+const TAG_HINTS: Hint[] = [
+	NAV_HINT,
+	MENU_HINT,
+	ENTER_HINT,
+	SEARCH_HINT,
+	QUIT_HINT,
+];
+const OVERVIEW_HINTS: Hint[] = [NAV_HINT, ENTER_HINT, SEARCH_HINT, QUIT_HINT];
+
 interface TopBarProps {
 	selectedKind: NavItem["kind"];
 	fullscreenLogs: boolean;
+	searchMode: boolean;
+	searchQuery: string;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ selectedKind, fullscreenLogs }) => (
-	<Box paddingX={1} flexShrink={0}>
-		<Text bold>LayerMix TUI</Text>
-		<Text> | </Text>
-		{fullscreenLogs ? (
-			<Text>
-				<Text dimColor>Logs fullscreen — </Text>
-				<Kbd k="PgUp/Dn" />
-				<Text dimColor> scroll · </Text>
-				<Kbd k="g/G" />
-				<Text dimColor> top/tail · </Text>
-				<Kbd k="f" />
-				<Text dimColor>/</Text>
-				<Kbd k="Esc" />
-				<Text dimColor> exit</Text>
-			</Text>
-		) : selectedKind === "task" ? (
-			<Text>
-				<Kbd k="↑↓" />
-				<Text dimColor> nav · </Text>
-				<Kbd k="←→" />
-				<Text dimColor> menu · </Text>
-				<Kbd k="Enter" />
-				<Text dimColor> select · </Text>
-				<Kbd k="PgUp/Dn" />
-				<Text dimColor> scroll · </Text>
-				<Kbd k="f" />
-				<Text dimColor> fullscreen · </Text>
-				<Kbd k="q" />
-				<Text dimColor> quit</Text>
-			</Text>
-		) : selectedKind === "tag" ? (
-			<Text>
-				<Kbd k="↑↓" />
-				<Text dimColor> nav · </Text>
-				<Kbd k="←→" />
-				<Text dimColor> menu · </Text>
-				<Kbd k="Enter" />
-				<Text dimColor> select · </Text>
-				<Kbd k="q" />
-				<Text dimColor> quit</Text>
-			</Text>
-		) : (
-			<Text>
-				<Kbd k="↑↓" />
-				<Text dimColor> nav · </Text>
-				<Kbd k="Enter" />
-				<Text dimColor> select · </Text>
-				<Kbd k="q" />
-				<Text dimColor> quit</Text>
-			</Text>
-		)}
-	</Box>
-);
+const TopBar: React.FC<TopBarProps> = ({
+	selectedKind,
+	fullscreenLogs,
+	searchMode,
+	searchQuery,
+}) => {
+	let hints: Hint[];
+	if (selectedKind === "task") hints = TASK_HINTS;
+	else if (selectedKind === "tag") hints = TAG_HINTS;
+	else hints = OVERVIEW_HINTS;
+
+	return (
+		<Box paddingX={1} flexShrink={0}>
+			<Text bold>LayerMix TUI</Text>
+			<Text> | </Text>
+			{searchMode ? (
+				<Text>
+					<Text color="cyan">Search: /{searchQuery}</Text>
+					<Text color="cyan" bold>
+						▌
+					</Text>
+					<Text dimColor> · </Text>
+					<HintList
+						hints={[NAV_HINT, ["Enter", "confirm"], ["Esc", "cancel"]]}
+					/>
+				</Text>
+			) : fullscreenLogs ? (
+				<Text>
+					<Text dimColor>Logs fullscreen — </Text>
+					<Kbd k="PgUp/Dn" />
+					<Text dimColor> scroll · </Text>
+					<Kbd k="g/G" />
+					<Text dimColor> top/tail · </Text>
+					<Kbd k="f" />
+					<Text dimColor>/</Text>
+					<Kbd k="Esc" />
+					<Text dimColor> exit</Text>
+				</Text>
+			) : (
+				<Text>
+					<HintList hints={hints} />
+				</Text>
+			)}
+		</Box>
+	);
+};
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 //
@@ -119,6 +152,8 @@ interface SidebarProps {
 	selectedTaskId: string;
 	allTags: string[];
 	selectedTag: string;
+	searchMode: boolean;
+	searchQuery: string;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -127,6 +162,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 	selectedTaskId,
 	allTags,
 	selectedTag,
+	searchMode,
+	searchQuery,
 }) => {
 	const innerWidth = SIDEBAR_WIDTH - 1; // minus own right-border column
 	return (
@@ -169,6 +206,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 					tasks={tasksList}
 					selectedTaskId={selectedTaskId}
 					width={innerWidth}
+					searchActive={searchMode}
+					searchQuery={searchQuery}
 				/>
 			</Box>
 			<Box flexShrink={0} flexDirection="column">
@@ -200,24 +239,35 @@ const App: React.FC<AppProps> = ({
 	const [columns, rows] = useStdoutDimensions();
 	const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH);
 
+	const [selectedIndex, setSelectedIndex] = useState(0);
+	const [fullscreenLogs, setFullscreenLogs] = useState(false);
+	const [searchMode, setSearchMode] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+
+	// Case-insensitive substring match against task ids. When no query is set
+	// (search closed, or `/` just opened with an empty buffer) we show every
+	// task so the sidebar doesn't flash empty between keystrokes.
+	const filteredTaskIds = useMemo(() => {
+		if (!searchQuery) return allTaskIds;
+		const q = searchQuery.toLowerCase();
+		return allTaskIds.filter((id) => id.toLowerCase().includes(q));
+	}, [searchQuery, allTaskIds]);
+
 	const navItems = useMemo<NavItem[]>(
 		() => [
 			{ kind: "overview" },
-			...allTaskIds.map<NavItem>((id) => ({ kind: "task", id })),
+			...filteredTaskIds.map<NavItem>((id) => ({ kind: "task", id })),
 			...allTags.map<NavItem>((name) => ({ kind: "tag", name })),
 		],
-		[allTaskIds, allTags],
+		[filteredTaskIds, allTags],
 	);
-
-	const [selectedIndex, setSelectedIndex] = useState(0);
-	const [fullscreenLogs, setFullscreenLogs] = useState(false);
 
 	const tasksList = useMemo(
 		() =>
-			allTaskIds.map(
+			filteredTaskIds.map(
 				(id) => tasksMap[id] ?? { id, status: "IDLE" as const, output: [] },
 			),
-		[allTaskIds, tasksMap],
+		[filteredTaskIds, tasksMap],
 	);
 
 	const selected = navItems[selectedIndex] ?? navItems[0];
@@ -244,13 +294,69 @@ const App: React.FC<AppProps> = ({
 		if (selected.kind !== "task") setFullscreenLogs(false);
 	}, [selected.kind]);
 
+	// Every keystroke that changes the query re-anchors selection to the first
+	// match. Without this the cursor would stay on wherever it was before the
+	// filter shrank, which means the highlighted row often isn't even visible.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally keyed on query so typing jumps to first match; ignoring filteredTaskIds/setSelectedIndex avoids extra resets when tasksMap updates.
+	useEffect(() => {
+		if (!searchMode) return;
+		setSelectedIndex(filteredTaskIds.length > 0 ? 1 : 0);
+	}, [searchQuery, searchMode]);
+
 	const quit = () => {
 		exit();
 		process.exit(0);
 	};
 
+	const moveSelection = (delta: 1 | -1) => {
+		setSelectedIndex((prev) => {
+			const next = prev + delta;
+			if (next < 0) return navItems.length - 1;
+			if (next >= navItems.length) return 0;
+			return next;
+		});
+	};
+
+	// Search mode owns the input stream — every printable character feeds the
+	// query rather than triggering shortcuts. Only Esc / Enter / Backspace
+	// and arrows escape out. Returns true when the key was consumed so the
+	// main handler can bail.
+	const handleSearchInput = (input: string, key: Key): boolean => {
+		if (key.escape) {
+			setSearchMode(false);
+			setSearchQuery("");
+			return true;
+		}
+		if (key.return) {
+			setSearchMode(false);
+			return true;
+		}
+		if (key.backspace || key.delete) {
+			setSearchQuery((q) => q.slice(0, -1));
+			return true;
+		}
+		if (key.upArrow) {
+			moveSelection(-1);
+			return true;
+		}
+		if (key.downArrow) {
+			moveSelection(1);
+			return true;
+		}
+		if (input && !key.ctrl && !key.meta) {
+			setSearchQuery((q) => q + input);
+		}
+		return true;
+	};
+
 	useInput((input, key) => {
 		if (input === "c" && key.ctrl) quit();
+
+		if (searchMode) {
+			handleSearchInput(input, key);
+			return;
+		}
+
 		if (key.escape) {
 			if (fullscreenLogs) {
 				setFullscreenLogs(false);
@@ -263,6 +369,12 @@ const App: React.FC<AppProps> = ({
 		// the task selection.
 		if (fullscreenLogs) return;
 
+		if (input === "/") {
+			setSearchMode(true);
+			setSearchQuery("");
+			return;
+		}
+
 		// Global quit. TaskDetail owns `q` while fullscreen (exits fullscreen),
 		// so we only reach here outside that mode thanks to the guard above.
 		if (input === "q") {
@@ -271,12 +383,11 @@ const App: React.FC<AppProps> = ({
 		}
 
 		if (key.upArrow || input === "k") {
-			setSelectedIndex((prev) => (prev > 0 ? prev - 1 : navItems.length - 1));
+			moveSelection(-1);
 			return;
 		}
 		if (key.downArrow || input === "j") {
-			setSelectedIndex((prev) => (prev < navItems.length - 1 ? prev + 1 : 0));
-			return;
+			moveSelection(1);
 		}
 		// All per-view shortcuts (r, R, c, x, Enter, arrows for menu) live in
 		// TaskDetail / TagDetail — App only handles the global stuff above.
@@ -296,8 +407,11 @@ const App: React.FC<AppProps> = ({
 					description={tasksById[selected.id]?.description}
 					cmd={tasksById[selected.id]?.cmd}
 					width={contentWidth}
+					inputLocked={searchMode}
 					onRun={() => executor.scheduleTask(selected.id)}
-					onRunWithDeps={() => executor.scheduleRun([selected.id])}
+					onRunWithDeps={() =>
+						executor.scheduleRun([selected.id], undefined, { force: true })
+					}
 					onRetry={() => executor.retry(selected.id)}
 					onKill={() => executor.killTask(selected.id)}
 					onClose={() => setSelectedIndex(0)}
@@ -312,8 +426,14 @@ const App: React.FC<AppProps> = ({
 				taskIds={tasksByTag[selected.name] ?? []}
 				tasks={tasksMap}
 				width={contentWidth}
+				inputLocked={searchMode}
 				onRun={() =>
-					executor.scheduleRun(undefined, (selected as { name: string }).name)
+					executor.scheduleRun(undefined, (selected as { name: string }).name, {
+						force: true,
+					})
+				}
+				onRetryFailed={() =>
+					executor.retryFailed(tasksByTag[(selected as { name: string }).name])
 				}
 				onClose={() => setSelectedIndex(0)}
 			/>
@@ -342,6 +462,8 @@ const App: React.FC<AppProps> = ({
 				selectedTaskId={selectedTaskId}
 				allTags={allTags}
 				selectedTag={selectedTag}
+				searchMode={searchMode}
+				searchQuery={searchQuery}
 			/>
 			<Box width={contentWidth} flexDirection="column" flexShrink={0}>
 				{renderContentPane()}
@@ -351,7 +473,12 @@ const App: React.FC<AppProps> = ({
 
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
-			<TopBar selectedKind={selected.kind} fullscreenLogs={fullscreenLogs} />
+			<TopBar
+				selectedKind={selected.kind}
+				fullscreenLogs={fullscreenLogs}
+				searchMode={searchMode}
+				searchQuery={searchQuery}
+			/>
 			<Text color="blue">{topBarDividerLine(columns, !isFullscreenTask)}</Text>
 			{bodyContent}
 		</Box>

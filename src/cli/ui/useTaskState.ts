@@ -41,6 +41,23 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 			});
 		};
 
+		const handleQueued = (taskId: string) => {
+			setTasks((prev) => {
+				const cur = prev[taskId] ?? {
+					id: taskId,
+					status: "IDLE" as const,
+					output: [],
+				};
+				return {
+					...prev,
+					[taskId]: {
+						...cur,
+						status: "QUEUED",
+					},
+				};
+			});
+		};
+
 		const handleStart = (taskId: string) => {
 			setTasks((prev) => ({
 				...prev,
@@ -133,6 +150,7 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 		};
 
 		executor.on("taskAdded", handleAdded);
+		executor.on("taskQueued", handleQueued);
 		executor.on("taskStart", handleStart);
 		executor.on("taskSuccess", handleSuccess);
 		executor.on("taskFail", handleFail);
@@ -142,6 +160,7 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 
 		return () => {
 			executor.off("taskAdded", handleAdded);
+			executor.off("taskQueued", handleQueued);
 			executor.off("taskStart", handleStart);
 			executor.off("taskSuccess", handleSuccess);
 			executor.off("taskFail", handleFail);

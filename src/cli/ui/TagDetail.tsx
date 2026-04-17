@@ -11,15 +11,24 @@ interface TagDetailProps {
 	tasks: Record<string, TaskState>;
 	width: number;
 	description?: string;
+	// When true, App is in search mode — this pane must stop consuming input
+	// so typed characters build the query instead of firing `r` / `x`.
+	inputLocked?: boolean;
 	onRun?: () => void;
+	onRetryFailed?: () => void;
 	onClose?: () => void;
 }
 
 const EMPTY_OPTIONS = ["Close"] as const;
 const DEFAULT_OPTIONS = ["Run Tag", "Close"] as const;
+// When the tag has any failed tasks we also offer the targeted retry so the
+// user can re-run just the failures (+ their downstream dependents) without
+// touching the already-green ones.
+const WITH_FAILURES_OPTIONS = ["Run Tag", "Retry Failed", "Close"] as const;
 
 const OPTION_KEYS: Record<string, string | undefined> = {
 	"Run Tag": "r",
+	"Retry Failed": "F",
 	Close: "x",
 };
 
@@ -52,7 +61,9 @@ const TagDetail: React.FC<TagDetailProps> = ({
 	tasks,
 	width,
 	description,
+	inputLocked = false,
 	onRun,
+	onRetryFailed,
 	onClose,
 }) => {
 	const filteredTasks = useMemo(() => {
@@ -63,7 +74,17 @@ const TagDetail: React.FC<TagDetailProps> = ({
 		return out;
 	}, [taskIds, tasks]);
 
-	const options = taskIds.length === 0 ? EMPTY_OPTIONS : DEFAULT_OPTIONS;
+	const hasFailures = useMemo(
+		() => taskIds.some((id) => tasks[id]?.status === "FAILURE"),
+		[taskIds, tasks],
+	);
+
+	const options: readonly string[] =
+		taskIds.length === 0
+			? EMPTY_OPTIONS
+			: hasFailures
+				? WITH_FAILURES_OPTIONS
+				: DEFAULT_OPTIONS;
 	const [selectedOption, setSelectedOption] = useState(0);
 
 	// Reset menu cursor when switching between tags, or when the option set
@@ -76,28 +97,36 @@ const TagDetail: React.FC<TagDetailProps> = ({
 	const activate = (choice: string | undefined) => {
 		if (!choice) return;
 		if (choice === "Run Tag") onRun?.();
+		else if (choice === "Retry Failed") onRetryFailed?.();
 		else if (choice === "Close") onClose?.();
 	};
 
-	useInput((input, key) => {
-		// Direct shortcuts.
-		if (input === "r" && taskIds.length > 0) {
-			onRun?.();
-			return;
-		}
-		if (input === "x") {
-			onClose?.();
-			return;
-		}
-		handleFooterNavInput(
-			input,
-			key,
-			options,
-			selectedOption,
-			setSelectedOption,
-			activate,
-		);
-	});
+	useInput(
+		(input, key) => {
+			// Direct shortcuts.
+			if (input === "r" && taskIds.length > 0) {
+				onRun?.();
+				return;
+			}
+			if (input === "F" && hasFailures) {
+				onRetryFailed?.();
+				return;
+			}
+			if (input === "x") {
+				onClose?.();
+				return;
+			}
+			handleFooterNavInput(
+				input,
+				key,
+				options,
+				selectedOption,
+				setSelectedOption,
+				activate,
+			);
+		},
+		{ isActive: !inputLocked },
+	);
 
 	const title = (
 		<Box flexDirection="column">

@@ -8,18 +8,32 @@ interface TaskListProps {
 	tasks: TaskState[];
 	selectedTaskId: string;
 	width?: number;
+	searchActive?: boolean;
+	searchQuery?: string;
 }
 
 const TaskList: React.FC<TaskListProps> = ({
 	tasks,
 	selectedTaskId,
 	width = 30,
+	searchActive = false,
+	searchQuery = "",
 }) => {
 	return (
 		<Box flexDirection="column" width={width} paddingX={1}>
 			<Box marginBottom={1}>
-				<Text bold>Tasks</Text>
+				{searchActive ? (
+					<Text color="cyan" wrap="truncate-end">
+						/{searchQuery}
+						<Text bold>▌</Text>
+					</Text>
+				) : (
+					<Text bold>Tasks</Text>
+				)}
 			</Box>
+			{searchActive && tasks.length === 0 && (
+				<Text dimColor> (no matches)</Text>
+			)}
 			{tasks.map((task) => {
 				const isSelected = task.id === selectedTaskId;
 				const color = STATUS_COLOR[task.status];

@@ -2,7 +2,7 @@ import type { TaskStatus } from "../../core/task-runner.js";
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
 	IDLE: "Waiting",
-	QUEUED: "Waiting",
+	QUEUED: "Queued",
 	RUNNING: "Running",
 	SUCCESS: "Success",
 	FAILURE: "Failed",
@@ -11,7 +11,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 
 export const STATUS_COLOR: Record<TaskStatus, string> = {
 	IDLE: "yellow",
-	QUEUED: "yellow",
+	QUEUED: "blue",
 	RUNNING: "blue",
 	SUCCESS: "green",
 	FAILURE: "red",
@@ -20,7 +20,7 @@ export const STATUS_COLOR: Record<TaskStatus, string> = {
 
 export const STATUS_ICON: Record<TaskStatus, string> = {
 	IDLE: "○",
-	QUEUED: "○",
+	QUEUED: "●",
 	RUNNING: "•",
 	SUCCESS: "✓",
 	FAILURE: "✗",

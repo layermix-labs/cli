@@ -75,40 +75,68 @@ export class Executor extends EventEmitter {
 	 * without wiping existing state. Safe to call repeatedly from the TUI as
 	 * the user triggers tags / tasks interactively. Already-running or
 	 * already-succeeded tasks are left alone; failed/skipped ones are reset.
+	 *
+	 * `force: true` additionally resets already-completed *seed* tasks so the
+	 * caller can re-run a tag (or a specific task) after it already finished.
+	 * Deps are not force-reset — re-running a tag doesn't need to re-build its
+	 * upstream closure.
 	 */
-	scheduleRun(targetTaskIds?: string[], tag?: string): void {
+	scheduleRun(
+		targetTaskIds?: string[],
+		tag?: string,
+		opts?: { force?: boolean },
+	): void {
+		const force = opts?.force ?? false;
 		const tasksToRun = this.identifyTasks(targetTaskIds, tag);
+		const seeds = force
+			? new Set(this.resolveSeeds(targetTaskIds, tag))
+			: undefined;
 		let added = false;
 
 		for (const id of tasksToRun) {
-			let runner = this.taskRunners.get(id);
-			if (!runner) {
-				const task = this.graph.getTask(id);
-				if (!task) continue;
-				runner = new TaskRunner(task);
-				runner.on("output", (data) => this.emit("taskOutput", id, data));
-				this.taskRunners.set(id, runner);
-				this.emit("taskAdded", id);
-			}
-
-			if (
-				this.running.has(id) ||
-				this.completed.has(id) ||
-				this.pending.has(id)
-			)
-				continue;
-
-			if (this.failed.has(id) || this.skipped.has(id)) {
-				runner.reset();
-				this.failed.delete(id);
-				this.skipped.delete(id);
-				this.emit("taskReset", id);
-			}
-			this.pending.add(id);
-			added = true;
+			if (this.enqueueTask(id, seeds)) added = true;
 		}
 
 		if (added) this.processQueue();
+	}
+
+	// Create-or-reuse a runner and decide whether the task needs to enter the
+	// pending queue. Returns true iff we actually pushed it. Keeps scheduleRun
+	// under the cyclomatic budget by isolating the per-task decision tree.
+	private enqueueTask(id: string, forceSeeds?: Set<string>): boolean {
+		const runner = this.ensureRunner(id);
+		if (!runner) return false;
+
+		if (this.running.has(id) || this.pending.has(id)) return false;
+
+		const forceReset = !!forceSeeds?.has(id) && this.completed.has(id);
+		if (!forceReset && this.completed.has(id)) return false;
+
+		if (forceReset || this.failed.has(id) || this.skipped.has(id)) {
+			runner.reset();
+			this.completed.delete(id);
+			this.failed.delete(id);
+			this.skipped.delete(id);
+			this.emit("taskReset", id);
+		}
+		this.pending.add(id);
+		this.emit("taskQueued", id);
+		return true;
+	}
+
+	// Returns an existing runner for `id` or lazily creates and registers one.
+	// Emits `taskAdded` on first creation so the TUI sees mid-session tasks.
+	// Returns null if the graph has no such task.
+	private ensureRunner(id: string): TaskRunner | null {
+		const existing = this.taskRunners.get(id);
+		if (existing) return existing;
+		const task = this.graph.getTask(id);
+		if (!task) return null;
+		const runner = new TaskRunner(task);
+		runner.on("output", (data) => this.emit("taskOutput", id, data));
+		this.taskRunners.set(id, runner);
+		this.emit("taskAdded", id);
+		return runner;
 	}
 
 	/**
@@ -119,16 +147,8 @@ export class Executor extends EventEmitter {
 	 * Use `scheduleRun([id])` for the safe "run this task + its deps" flow.
 	 */
 	scheduleTask(taskId: string): void {
-		const task = this.graph.getTask(taskId);
-		if (!task) return;
-
-		let runner = this.taskRunners.get(taskId);
-		if (!runner) {
-			runner = new TaskRunner(task);
-			runner.on("output", (data) => this.emit("taskOutput", taskId, data));
-			this.taskRunners.set(taskId, runner);
-			this.emit("taskAdded", taskId);
-		}
+		const runner = this.ensureRunner(taskId);
+		if (!runner) return;
 
 		if (this.running.has(taskId) || this.pending.has(taskId)) {
 			// Already queued; just mark it as force-runnable so it fires on the
@@ -152,6 +172,7 @@ export class Executor extends EventEmitter {
 
 		this.pending.add(taskId);
 		this.forceRun.add(taskId);
+		this.emit("taskQueued", taskId);
 		this.processQueue();
 	}
 
@@ -167,43 +188,57 @@ export class Executor extends EventEmitter {
 		return runner.kill();
 	}
 
+	// Shared reset path for retry / retryFailed: wipe any terminal state,
+	// re-arm the runner, push to pending, and emit the reset+queued pair so
+	// the UI flips from Success/Failure/Skipped back to Queued. Callers that
+	// still need to run `processQueue()` afterwards do it themselves.
+	private resetTaskToPending(id: string): void {
+		const runner = this.taskRunners.get(id);
+		if (!runner) return;
+		runner.reset();
+		this.completed.delete(id);
+		this.failed.delete(id);
+		this.skipped.delete(id);
+		this.pending.add(id);
+		this.emit("taskReset", id);
+		this.emit("taskQueued", id);
+	}
+
 	/**
 	 * Retries a specific task and its dependents.
 	 * Resets their state and resumes execution.
 	 */
 	async retry(taskId: string) {
-		// 1. Identify all downstream dependents
 		const dependents = this.graph.getAllDependents(taskId);
 		const toReset = new Set([taskId, ...dependents]);
 
-		// 2. Reset state for these tasks
-		for (const id of toReset) {
-			// Only reset if we are tracking this task (it was part of initial set)
-			// If a dependent wasn't part of the initial run (e.g. partial run), we might check.
-			// But identifyTasks includes dependencies, not dependents.
-			// If we ran a partial graph, dependents might not be in taskRunners.
-			// If they are not in taskRunners, we don't need to run them (unless we want to expand the graph? No, let's stick to current scope).
+		for (const id of toReset) this.resetTaskToPending(id);
 
-			if (this.taskRunners.has(id)) {
-				const runner = this.taskRunners.get(id);
-				if (runner) runner.reset();
+		this.emit("retry", taskId);
+		await this.processQueue();
+	}
 
-				this.completed.delete(id);
-				this.failed.delete(id);
-				this.skipped.delete(id);
-				// Remove from running? Should not be running if we are retrying (usually called when idle).
-				if (this.running.has(id)) {
-					// This is tricky. If we retry while running, we might have issues.
-					// Assume retry is called when things are settled or on failed tasks.
-				}
+	/**
+	 * Resets currently-failed tasks plus their downstream dependents and
+	 * re-queues them. Pass `filterIds` to restrict the scope (e.g. tag view
+	 * only retries failures within that tag). Omit to retry every failure in
+	 * the graph. No-op when nothing in scope has failed.
+	 */
+	async retryFailed(filterIds?: string[]): Promise<void> {
+		const allFailed = Array.from(this.failed);
+		const scope = filterIds
+			? allFailed.filter((id) => filterIds.includes(id))
+			: allFailed;
+		if (scope.length === 0) return;
 
-				this.pending.add(id);
-				this.emit("taskReset", id);
-			}
+		const toReset = new Set<string>();
+		for (const id of scope) {
+			toReset.add(id);
+			for (const d of this.graph.getAllDependents(id)) toReset.add(d);
 		}
 
-		// 3. Trigger processing
-		this.emit("retry", taskId);
+		for (const id of toReset) this.resetTaskToPending(id);
+
 		await this.processQueue();
 	}
 
@@ -374,24 +409,27 @@ export class Executor extends EventEmitter {
 		};
 	}
 
-	public identifyTasks(targetTaskIds?: string[], tag?: string): Set<string> {
+	// Seeds = the user's explicit target set (no dep closure). `identifyTasks`
+	// adds the upstream closure on top. Shared so scheduleRun(force) can
+	// distinguish "seeds to force-reset" from "deps that should stay cached".
+	private resolveSeeds(targetTaskIds?: string[], tag?: string): string[] {
 		const tasks = this.graph.getTasks();
-		const result = new Set<string>();
-
-		let seeds: string[] = [];
-
 		if (targetTaskIds && targetTaskIds.length > 0) {
-			seeds = targetTaskIds;
-		} else if (tag) {
-			seeds = Object.values(tasks)
+			return targetTaskIds.filter((id) => tasks[id]);
+		}
+		if (tag) {
+			return Object.values(tasks)
 				.filter((t) => t.tags.includes(tag))
 				.map((t) => t.id);
-		} else {
-			seeds = Object.keys(tasks);
 		}
+		return Object.keys(tasks);
+	}
+
+	public identifyTasks(targetTaskIds?: string[], tag?: string): Set<string> {
+		const seeds = this.resolveSeeds(targetTaskIds, tag);
+		const result = new Set<string>();
 
 		for (const seed of seeds) {
-			if (!tasks[seed]) continue;
 			result.add(seed);
 			const deps = this.graph.getAllDependencies(seed);
 			for (const d of deps) result.add(d);

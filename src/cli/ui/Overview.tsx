@@ -50,15 +50,13 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 	}, [taskList, now]);
 
 	const stats = useMemo(() => {
-		// ... same
 		const success = taskList.filter((t) => t.status === "SUCCESS").length;
 		const failure = taskList.filter((t) => t.status === "FAILURE").length;
 		const running = taskList.filter((t) => t.status === "RUNNING").length;
 		const skipped = taskList.filter((t) => t.status === "SKIPPED").length;
-		const pending = taskList.filter(
-			(t) => t.status === "IDLE" || t.status === "QUEUED",
-		).length;
-		return { success, failure, running, skipped, pending };
+		const queued = taskList.filter((t) => t.status === "QUEUED").length;
+		const pending = taskList.filter((t) => t.status === "IDLE").length;
+		return { success, failure, running, skipped, queued, pending };
 	}, [taskList]);
 
 	// Waterfall — strictly bounded by the pane we were given.
@@ -182,6 +180,7 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 					<Text color="green">Success: {stats.success} </Text>
 					<Text color="red">Failed: {stats.failure} </Text>
 					<Text color="blue">Running: {stats.running} </Text>
+					<Text color="blue">Queued: {stats.queued} </Text>
 					<Text color="gray">Not Started: {stats.skipped} </Text>
 					<Text color="yellow">Waiting: {stats.pending}</Text>
 				</Box>
