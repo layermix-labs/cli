@@ -4,6 +4,7 @@ import { Box, Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { STATUS_COLOR, STATUS_LABEL } from "./status.js";
+import { useMouseWheel } from "./useMouseWheel.js";
 import useStdoutDimensions from "./useStdoutDimensions.js";
 import type { TaskState } from "./useTaskState.js";
 
@@ -15,6 +16,7 @@ interface TaskDetailProps {
 	onRun?: () => void;
 	onRunWithDeps?: () => void;
 	onRetry?: () => void;
+	onKill?: () => void;
 	onClose?: () => void;
 	onToggleFullscreen?: () => void;
 }
@@ -25,6 +27,7 @@ const FAILURE_OPTIONS = [
 	"Copy Logs",
 	"Close",
 ] as const;
+const RUNNING_OPTIONS = ["Kill", "Copy Logs", "Close"] as const;
 const DEFAULT_OPTIONS = ["Run", "Run With Deps", "Copy Logs", "Close"] as const;
 
 // Sanitize a captured log line for safe rendering inside Ink.
@@ -66,12 +69,18 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	onRun,
 	onRunWithDeps,
 	onRetry,
+	onKill,
 	onClose,
 	onToggleFullscreen,
 }) => {
 	const [, rows] = useStdoutDimensions();
 	const isFailed = task.status === "FAILURE";
-	const options = isFailed ? FAILURE_OPTIONS : DEFAULT_OPTIONS;
+	const isRunning = task.status === "RUNNING";
+	const options = isRunning
+		? RUNNING_OPTIONS
+		: isFailed
+			? FAILURE_OPTIONS
+			: DEFAULT_OPTIONS;
 	const [selectedOption, setSelectedOption] = useState(0);
 	const [message, setMessage] = useState("");
 
@@ -109,6 +118,13 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		setSelectedOption(0);
 		setTail(true);
 	}, [task.id]);
+
+	// Also reset when the status category flips (Running ↔ Failed ↔ Default),
+	// because each uses a different options array — a stale index could land
+	// out of bounds or on an unrelated option.
+	useEffect(() => {
+		setSelectedOption(0);
+	}, [options]);
 
 	useInput((input, key) => {
 		// --- Scroll controls (always available inside TaskDetail) ---
@@ -190,6 +206,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			if (choice === "Retry") onRetry?.();
 			else if (choice === "Run") onRun?.();
 			else if (choice === "Run With Deps") onRunWithDeps?.();
+			else if (choice === "Kill") onKill?.();
 			else if (choice === "Copy Logs") {
 				try {
 					clipboardy.writeSync(task.output.join("\n"));
@@ -199,6 +216,20 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 					setMessage("Copy failed");
 				}
 			} else if (choice === "Close") onClose?.();
+		}
+	});
+
+	// Mouse wheel scrolling — 3 lines per tick (standard OS convention).
+	useMouseWheel((dir) => {
+		if (dir === "up") {
+			setTail(false);
+			setScrollTop((prev) => Math.max(0, prev - 3));
+		} else {
+			setScrollTop((prev) => {
+				const next = Math.min(maxScroll, prev + 3);
+				if (next >= maxScroll) setTail(true);
+				return next;
+			});
 		}
 	});
 

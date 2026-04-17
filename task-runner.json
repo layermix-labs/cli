@@ -4,53 +4,65 @@
 		{
 			"id": "clean",
 			"cmd": "rm -rf dist",
+			"description": "Remove the dist/ output directory so the next build starts from a clean slate.",
 			"tags": ["build"],
 			"dependsOn": []
 		},
 		{
 			"id": "compile",
 			"cmd": "tsc",
+			"description": "Compile TypeScript sources to JavaScript using the project's tsconfig.",
 			"dependsOn": ["clean"],
 			"tags": ["build"]
 		},
 		{
 			"id": "lint",
 			"cmd": "biome check",
+			"description": "Run Biome linting and formatting checks across the repo.",
 			"tags": ["test"],
 			"dependsOn": []
 		},
 		{
 			"id": "typecheck",
 			"cmd": "tsgo --noEmit -p tsconfig.check.json",
+			"description": "Type-check the project with tsgo without emitting output.",
 			"tags": ["test"],
 			"dependsOn": []
 		},
 		{
 			"id": "fallow",
 			"cmd": "fallow",
+			"description": "Detect unused exports and dead code with fallow.",
 			"tags": ["test"],
 			"dependsOn": []
 		},
 		{
 			"id": "test",
 			"cmd": "vitest run",
-			"dependsOn": ["compile", "lint", "typecheck"],
+			"description": "Run the full Vitest suite once (unit + E2E) in non-watch mode.",
+			"dependsOn": [],
 			"tags": ["test"]
 		},
 		{
 			"id": "bundle",
 			"cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
+			"description": "Bundle the compiled entry point into a single dist/bundle.js via esbuild.",
 			"dependsOn": ["compile"],
 			"tags": ["build"]
 		},
 		{
 			"id": "fix",
 			"cmd": "biome check --write",
+			"description": "Auto-fix lint and formatting issues in place with Biome.",
 			"tags": [],
 			"dependsOn": []
 		}
 	],
 	"env": {
 		"NODE_ENV": "development"
+	},
+	"tags": {
+		"build": "Tasks that produce build artifacts (clean, compile, bundle).",
+		"test": "Quality gates run in CI: linting, type-checking, dead-code detection, and tests."
 	}
 }

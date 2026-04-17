@@ -29,17 +29,19 @@ npm start -- validate
 # run tasks (and their dependencies) — `run` is the default command, can be omitted
 npm start -- build                     # by id
 npm start -- -t test                   # by tag
-npm start                              # everything
+npm start                              # no target: opens idle TUI (or prints a hint in linear mode). Use --ci to auto-run everything.
 npm start -- run build                 # explicit form also works
 
-# CI / non-TTY
-npm start -- --no-tui --output-only-failed
-npm start -- --ci                      # forces non-TTY (linear output)
+# CI / AI-agent / non-TTY
+npm start -- --ci --output-only-failed
+npm start -- --ci                      # forces linear output and auto-runs all tasks when no target is given
+npm start -- --ai                      # alias for --ci; intended for use from coding agents
 CI=true npm start                      # auto-detected via is-ci; same effect as --ci
+CLAUDECODE=1 npm start                 # auto-detected AI-agent mode; same effect as --ai
 npm start -- --junit report.xml        # write JUnit XML report on exit (works in both TUI and linear modes)
 ```
 
-CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or the explicit `--ci` flag. Either one forces linear output (no TUI even on a TTY). For machine-readable results, pass `--junit <path>` to write a JUnit XML report (see below).
+CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or the explicit `--ci` flag. AI-agent mode is detected from common coding-agent env vars (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_AGENT`, `CURSOR_TRACE_ID`, `AIDER_MODEL`, `AIDER_CHAT_HISTORY_FILE`, `CONTINUE_SESSION_ID`) or the explicit `--ai` flag; the generic `AI_AGENT` env var is a manual opt-in for anything unlisted. Any of these paths forces linear output (no TUI even on a TTY) and treats an empty target as "run everything". In non-CI/AI mode, an empty target runs nothing — specify task ids or `-t <tag>`. For machine-readable results, pass `--junit <path>` to write a JUnit XML report (see below).
 
 ### Config (`task-runner.json`)
 
@@ -79,7 +81,7 @@ Quit with `Ctrl+C` or `Esc`.
 
 ### Linear mode
 
-`--no-tui`, or any non-TTY stdout: output is **buffered per task** and flushed only after a task finishes — so parallel execution doesn't garble logs. Task headers (`[task] Starting...` / `Finished (Success)` / `Failed` / `Skipped`) mark ordering.
+`--ci`, or any non-TTY stdout: output is **buffered per task** and flushed only after a task finishes — so parallel execution doesn't garble logs. Task headers (`[task] Starting...` / `Finished (Success)` / `Failed` / `Skipped`) mark ordering.
 
 ### Tests
 

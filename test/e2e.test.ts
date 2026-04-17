@@ -70,8 +70,8 @@ describe("CLI e2e", () => {
 		expect(plan.executionPlan).toEqual([["a"], ["b"]]);
 	});
 
-	it("run --no-tui executes tasks in dependency order", async () => {
-		const res = await runCli(["run", "b", "--no-tui"], simple);
+	it("run executes tasks in dependency order in linear mode", async () => {
+		const res = await runCli(["run", "b"], simple);
 		expect(res.exitCode).toBe(0);
 		const aIdx = res.stdout.indexOf("[a] Starting");
 		const bIdx = res.stdout.indexOf("[b] Starting");
@@ -82,7 +82,7 @@ describe("CLI e2e", () => {
 	});
 
 	it("run exits 1 and skips downstream on failure", async () => {
-		const res = await runCli(["run", "--no-tui"], failing);
+		const res = await runCli(["run", "downstream"], failing);
 		expect(res.exitCode).toBe(1);
 		expect(res.stdout).toContain("[bad] Failed");
 		expect(res.stdout).toContain("[downstream] Not Started");
@@ -93,7 +93,7 @@ describe("CLI e2e", () => {
 		const junitPath = path.join(tmp, "report.xml");
 		try {
 			const res = await runCli(
-				["run", "--no-tui", "--junit", junitPath],
+				["run", "downstream", "--junit", junitPath],
 				failing,
 			);
 			expect(res.exitCode).toBe(1);
@@ -115,10 +115,7 @@ describe("CLI e2e", () => {
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
 		const junitPath = path.join(tmp, "report.xml");
 		try {
-			const res = await runCli(
-				["run", "--no-tui", "--junit", junitPath],
-				simple,
-			);
+			const res = await runCli(["run", "b", "--junit", junitPath], simple);
 			expect(res.exitCode).toBe(0);
 			expect(fs.existsSync(junitPath)).toBe(true);
 			const xml = fs.readFileSync(junitPath, "utf8");
@@ -135,10 +132,7 @@ describe("CLI e2e", () => {
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
 		const junitPath = path.join(tmp, "nested", "dir", "report.xml");
 		try {
-			const res = await runCli(
-				["run", "--no-tui", "--junit", junitPath, "a"],
-				simple,
-			);
+			const res = await runCli(["run", "--junit", junitPath, "a"], simple);
 			expect(res.exitCode).toBe(0);
 			expect(fs.existsSync(junitPath)).toBe(true);
 		} finally {
@@ -146,28 +140,76 @@ describe("CLI e2e", () => {
 		}
 	});
 
-	it("--ci flag alone implies --no-tui and no longer emits stdout markers", async () => {
-		// Strip CI env vars so only the flag is driving the mode.
+	const strippedEnv = () => ({
+		...process.env,
+		NO_COLOR: "1",
+		CI: undefined,
+		CONTINUOUS_INTEGRATION: undefined,
+		GITHUB_ACTIONS: undefined,
+		BUILD_ID: undefined,
+		CLAUDECODE: undefined,
+		CLAUDE_CODE_ENTRYPOINT: undefined,
+		CURSOR_AGENT: undefined,
+		CURSOR_TRACE_ID: undefined,
+		AIDER_MODEL: undefined,
+		AIDER_CHAT_HISTORY_FILE: undefined,
+		CONTINUE_SESSION_ID: undefined,
+		AI_AGENT: undefined,
+	});
+
+	it("--ci flag alone triggers linear mode and auto-runs all tasks", async () => {
+		// Strip CI + AI env vars so only the flag is driving the mode.
 		const res = await execa(
 			"node",
 			[VITE_NODE, "--root", ROOT, CLI, "run", "--ci"],
 			{
 				cwd: failing,
 				reject: false,
-				env: {
-					...process.env,
-					NO_COLOR: "1",
-					CI: undefined,
-					CONTINUOUS_INTEGRATION: undefined,
-					GITHUB_ACTIONS: undefined,
-					BUILD_ID: undefined,
-				},
+				env: strippedEnv(),
 				stdio: ["ignore", "pipe", "pipe"],
 			},
 		);
 		expect(res.exitCode).toBe(1);
 		expect(res.stdout).toContain("[bad] Failed");
 		expect(res.stdout).not.toMatch(/---BEGIN MY-RUNNER-REPORT---/);
+	});
+
+	it("--ai flag alone triggers linear mode and auto-runs all tasks", async () => {
+		const res = await execa(
+			"node",
+			[VITE_NODE, "--root", ROOT, CLI, "run", "--ai"],
+			{
+				cwd: failing,
+				reject: false,
+				env: strippedEnv(),
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
+		expect(res.exitCode).toBe(1);
+		expect(res.stdout).toContain("[bad] Failed");
+	});
+
+	it("CLAUDECODE env auto-triggers AI-agent mode", async () => {
+		const res = await execa("node", [VITE_NODE, "--root", ROOT, CLI, "run"], {
+			cwd: failing,
+			reject: false,
+			env: { ...strippedEnv(), CLAUDECODE: "1" },
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stdout).toContain("[bad] Failed");
+	});
+
+	it("bare run with no target and no CI/AI signal prints a hint and exits 0", async () => {
+		const res = await execa("node", [VITE_NODE, "--root", ROOT, CLI, "run"], {
+			cwd: simple,
+			reject: false,
+			env: strippedEnv(),
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("No tasks specified");
+		expect(res.stdout).not.toContain("[a] Starting");
 	});
 
 	it("init writes a task-runner.json with $schema reference", async () => {

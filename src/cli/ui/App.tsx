@@ -212,6 +212,7 @@ const App: React.FC<AppProps> = ({
 								onRun={() => executor.scheduleTask(selected.id)}
 								onRunWithDeps={() => executor.scheduleRun([selected.id])}
 								onRetry={() => executor.retry(selected.id)}
+								onKill={() => executor.killTask(selected.id)}
 								onClose={() => setSelectedIndex(0)}
 								onToggleFullscreen={() => setFullscreenLogs(true)}
 							/>

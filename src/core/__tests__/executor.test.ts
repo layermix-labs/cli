@@ -191,6 +191,59 @@ describe("Executor", () => {
 		expect(calls).not.toContain("echo D");
 	});
 
+	it("killTask stops a running task, surfaces taskFail, and cascade-skips downstream", async () => {
+		// Give task-b a controllable process so we can kill mid-flight.
+		let killFn: ((signal?: string) => void) | null = null;
+		(execa as any).mockImplementation((cmd: string) => {
+			if (cmd === "echo B") {
+				let reject: (err: Error) => void;
+				const p = new Promise((_resolve, rej) => {
+					reject = rej;
+				}) as any;
+				p.stdout = { on: vi.fn() };
+				p.stderr = { on: vi.fn() };
+				p.kill = vi.fn(() => {
+					const err = new Error("killed");
+					(err as any).isTerminated = true;
+					reject(err);
+				});
+				killFn = p.kill;
+				return p;
+			}
+			const p = Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+			(p as any).stdout = { on: vi.fn() };
+			(p as any).stderr = { on: vi.fn() };
+			return p;
+		});
+
+		const executor = new Executor(graph);
+		const failed: string[] = [];
+		const skipped: string[] = [];
+		executor.on("taskFail", (id) => failed.push(id));
+		executor.on("taskSkipped", (id) => skipped.push(id));
+
+		// Run task-d (needs task-a, task-b, task-c, task-d). task-b will hang; kill it.
+		const runPromise = executor.execute(["task-d"]);
+
+		// Wait for task-b to reach RUNNING (after task-a resolves).
+		await new Promise((r) => setTimeout(r, 10));
+
+		expect(killFn).not.toBeNull();
+		const killed = executor.killTask("task-b");
+		expect(killed).toBe(true);
+
+		await runPromise;
+
+		expect(failed).toContain("task-b");
+		expect(skipped).toContain("task-d");
+	});
+
+	it("killTask is a no-op and returns false for a task that isn't running", () => {
+		const executor = new Executor(graph);
+		// Task isn't even registered as a runner yet.
+		expect(executor.killTask("task-a")).toBe(false);
+	});
+
 	it("scheduleRun is additive: already-completed tasks are not re-run", async () => {
 		const executor = new Executor(graph);
 		const added: string[] = [];

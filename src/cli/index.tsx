@@ -14,9 +14,33 @@ import {
 } from "../core/junit-report.js";
 import { TaskGraph } from "../core/task-graph.js";
 import App from "./ui/App.js";
+import {
+	disableMouseReporting,
+	enableMouseReporting,
+} from "./ui/useMouseWheel.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Detects common coding-agent runtimes so output falls back to the linear,
+// machine-readable mode the same way CI does. Agents we check:
+//   Claude Code (CLAUDECODE, CLAUDE_CODE_ENTRYPOINT)
+//   Cursor agent (CURSOR_AGENT, CURSOR_TRACE_ID)
+//   Aider        (AIDER_MODEL, AIDER_CHAT_HISTORY_FILE)
+//   Continue     (CONTINUE_SESSION_ID)
+//   Generic      (AI_AGENT — opt-in env users can set for anything unlisted)
+function isAiAgent(): boolean {
+	const env = process.env;
+	return !!(
+		env.CLAUDECODE ||
+		env.CLAUDE_CODE_ENTRYPOINT ||
+		env.CURSOR_AGENT ||
+		env.CURSOR_TRACE_ID ||
+		env.AIDER_CHAT_HISTORY_FILE ||
+		env.CONTINUE_SESSION_ID ||
+		env.AI_AGENT
+	);
+}
 
 // Alternate screen buffer + cursor hide. Pins the TUI to a full fresh pane,
 // and restores the user's terminal scrollback on exit.
@@ -36,10 +60,14 @@ function exitAltScreen() {
 	altScreenActive = false;
 }
 
-process.on("exit", exitAltScreen);
+process.on("exit", () => {
+	exitAltScreen();
+	disableMouseReporting();
+});
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 	process.on(sig, () => {
 		exitAltScreen();
+		disableMouseReporting();
 		process.exit(1);
 	});
 }
@@ -174,10 +202,13 @@ program
 	.option("--dry-run-json", "Print execution plan in JSON")
 	.option("--concurrency <number>", "Maximum parallel tasks", parseInt)
 	.option("--output-only-failed", "Only show output for failed tasks")
-	.option("--no-tui", "Disable interactive TUI and use linear output")
 	.option(
 		"--ci",
-		"CI mode: disable TUI (auto-detected from common CI env vars)",
+		"CI mode: disable TUI and run all tasks when no target specified (auto-detected from common CI env vars)",
+	)
+	.option(
+		"--ai",
+		"AI-agent mode: same as --ci; use when invoked by a coding agent (auto-detected for Claude Code, Cursor, Aider, Continue, or via the AI_AGENT env var)",
 	)
 	.option(
 		"--junit <path>",
@@ -196,7 +227,7 @@ program
 				rootDir: process.cwd(),
 			});
 
-			const ciMode = !!options.ci || isCI;
+			const ciMode = !!options.ci || !!options.ai || isCI || isAiAgent();
 
 			if (options.dryRunJson) {
 				const plan = executor.getDryRunJson(
@@ -267,11 +298,13 @@ program
 				}
 			};
 
-			const useTui = process.stdout.isTTY && options.tui !== false && !ciMode;
+			const useTui = process.stdout.isTTY && !ciMode;
+			const hasExplicitTarget = taskIds.length > 0 || !!options.tag;
 
 			if (useTui) {
 				const allTasks = Object.values(config.tasks);
 				enterAltScreen();
+				enableMouseReporting();
 				const app = render(
 					<App
 						executor={executor}
@@ -283,9 +316,12 @@ program
 					},
 				);
 
-				executor.execute(taskIds.length ? taskIds : undefined, options.tag);
+				if (hasExplicitTarget) {
+					executor.execute(taskIds.length ? taskIds : undefined, options.tag);
+				}
 
 				await app.waitUntilExit();
+				disableMouseReporting();
 				exitAltScreen();
 				flushJunit();
 				process.exit(0);
@@ -321,6 +357,15 @@ program
 						chalk.gray(`[${taskId}] Not Started (dependency failed)`),
 					);
 				});
+
+				if (!hasExplicitTarget && !ciMode) {
+					console.log(
+						chalk.yellow(
+							"No tasks specified. Pass task ids or -t <tag>, or run `my-runner list` to see available tasks.",
+						),
+					);
+					return;
+				}
 
 				const success = await executor.execute(
 					taskIds.length ? taskIds : undefined,

@@ -155,6 +155,18 @@ export class Executor extends EventEmitter {
 	}
 
 	/**
+	 * Terminates a running task. Returns true if a kill signal was sent.
+	 * The task flows through the normal failure path (taskFail event,
+	 * downstream dependents cascade-skip). Safe no-op if the task isn't
+	 * running.
+	 */
+	killTask(taskId: string): boolean {
+		const runner = this.taskRunners.get(taskId);
+		if (!runner) return false;
+		return runner.kill();
+	}
+
+	/**
 	 * Retries a specific task and its dependents.
 	 * Resets their state and resumes execution.
 	 */
