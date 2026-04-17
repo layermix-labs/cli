@@ -139,9 +139,12 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 					<Box key={task.id} minHeight={1} width={innerWidth}>
 						<Box width={LABEL_WIDTH} flexShrink={0}>
 							<Text wrap="truncate-end">
-								{task.id.length > LABEL_WIDTH - 2
-									? `${task.id.slice(0, LABEL_WIDTH - 4)}...`
-									: task.id}
+								{(() => {
+									const name = task.label ?? task.id;
+									return name.length > LABEL_WIDTH - 2
+										? `${name.slice(0, LABEL_WIDTH - 4)}...`
+										: name;
+								})()}
 							</Text>
 						</Box>
 						<Box width={chartWidth} flexShrink={0} overflowX="hidden">
@@ -186,7 +189,7 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 				</Box>
 				{bottleneck?.duration && (
 					<Text>
-						Bottleneck: {bottleneck.id} (
+						Bottleneck: {bottleneck.label ?? bottleneck.id} (
 						{(bottleneck.duration / 1000).toFixed(1)}s)
 					</Text>
 				)}

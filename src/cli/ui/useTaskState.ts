@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Executor } from "../../core/executor.js";
 import type { TaskStatus } from "../../core/task-runner.js";
+import type { Task } from "../../types/config.js";
 
 export interface TaskState {
 	id: string;
+	// UI-only display name. Rendered in sidebar/overview/task-detail in place
+	// of `id` when set. Copied from the task config at init (and on taskAdded);
+	// never changes over the lifetime of a task.
+	label?: string;
 	status: TaskStatus;
 	output: string[];
 	startTime?: number;
@@ -18,11 +23,24 @@ export interface TaskState {
 const FLUSH_INTERVAL_MS = 16;
 const MAX_OUTPUT_LINES = 5000;
 
-export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
+export const useTaskExecutor = (executor: Executor, knownTasks: Task[]) => {
+	// Labels live on the static config, not on executor events. Stash them in a
+	// ref so handleAdded can hydrate a new TaskState with the right label
+	// without forcing the effect to resubscribe whenever knownTasks changes.
+	const labelsRef = useRef<Record<string, string | undefined>>({});
+	labelsRef.current = Object.fromEntries(
+		knownTasks.map((t) => [t.id, t.label]),
+	);
+
 	const [tasks, setTasks] = useState<Record<string, TaskState>>(() => {
 		const initial: Record<string, TaskState> = {};
-		knownTaskIds.forEach((id) => {
-			initial[id] = { id, status: "IDLE", output: [] };
+		knownTasks.forEach((t) => {
+			initial[t.id] = {
+				id: t.id,
+				label: t.label,
+				status: "IDLE",
+				output: [],
+			};
 		});
 		return initial;
 	});
@@ -36,7 +54,12 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 				if (prev[taskId]) return prev;
 				return {
 					...prev,
-					[taskId]: { id: taskId, status: "IDLE", output: [] },
+					[taskId]: {
+						id: taskId,
+						label: labelsRef.current[taskId],
+						status: "IDLE",
+						output: [],
+					},
 				};
 			});
 		};

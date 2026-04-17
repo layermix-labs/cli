@@ -38,7 +38,7 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
   "defaultRun": "-t test",
   "tasks": [
     { "id": "clean",   "cmd": "rm -rf dist",   "dependsOn": [],                  "group": "build" },
-    { "id": "compile", "cmd": "tsc",           "dependsOn": ["clean"],           "group": "build" },
+    { "id": "compile", "cmd": "tsc",           "dependsOn": ["clean"],           "group": "build", "label": "TypeScript compile" },
     { "id": "lint",    "cmd": "eslint .",      "dependsOn": [],                  "tags": ["test"] },
     { "id": "test",    "cmd": "vitest run",    "dependsOn": ["compile", "lint"], "tags": ["test"] },
     {
@@ -58,8 +58,9 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
 
 Per-task fields:
 
-- `id` (required) — unique name. Can contain any characters, including emoji.
+- `id` (required) — unique name. Can contain any characters, including emoji. This is the canonical handle: CLI targets (`layermix <id>`), `dependsOn` references, JUnit `testcase` names, and dry-run JSON keys all use the id.
 - `cmd` (required) — shell command to run. May reference positional `$1`, `$2`, ... placeholders that get filled in from `args` (see [Task arguments](#task-arguments)).
+- `label` — optional display name. When set, used in the TUI sidebar, task detail header, Overview waterfall, `list` output, and linear log prefixes (`[label] Starting...`) in place of `id`. Purely cosmetic — `id` stays the canonical handle everywhere else, so changing a label never breaks `dependsOn` references, CLI invocations, or CI integrations parsing JUnit/dry-run output. Task search (`/` in the TUI) matches on both id and label.
 - `dependsOn` — task ids this task waits for.
 - `tags` — string array. Tags have both **UI** and **CLI** semantics: `layermix -t test` runs every task carrying that tag (plus their deps).
 - `group` — single string. Groups are **UI-only** — they reorganise the TUI sidebar, but have no CLI surface. See [Tags vs Groups](#tags-vs-groups).

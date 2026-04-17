@@ -43,10 +43,11 @@ function exitWithError(error: unknown, prefix = "Error"): never {
 }
 
 // Emit a task's captured stdout/stderr under a separator, or skip the block
-// if there's nothing to print.
-function logTaskOutput(taskId: string, output: string): void {
+// if there's nothing to print. `displayName` is the user-facing name —
+// `task.label ?? task.id` in linear output — separate from the canonical id.
+function logTaskOutput(displayName: string, output: string): void {
 	if (!output.trim()) return;
-	console.log(chalk.gray(`--- Output for ${taskId} ---`));
+	console.log(chalk.gray(`--- Output for ${displayName} ---`));
 	console.log(output);
 	console.log(chalk.gray(`-------------------------`));
 }
@@ -185,6 +186,7 @@ async function runTui(
 // separately from `options` because `defaultRun` may have synthesized one.
 async function runLinear(
 	executor: Executor,
+	config: ReturnType<ConfigLoader["load"]>,
 	options: { outputOnlyFailed?: boolean },
 	hasExplicitTarget: boolean,
 	ciMode: boolean,
@@ -192,7 +194,7 @@ async function runLinear(
 	tag: string | undefined,
 	flushJunit: () => void,
 ): Promise<void> {
-	wireLinearLogging(executor, options);
+	wireLinearLogging(executor, config, options);
 	if (!hasExplicitTarget && !ciMode) {
 		console.log(
 			chalk.yellow(
@@ -207,23 +209,33 @@ async function runLinear(
 }
 
 // Linear-mode task listeners: log each lifecycle transition to stdout.
+// The `[name]` prefix uses `task.label ?? task.id` so renaming a task in the
+// sidebar via `label` also renames it in CI logs — id still shows for
+// unlabeled tasks.
 function wireLinearLogging(
 	executor: Executor,
+	config: ReturnType<ConfigLoader["load"]>,
 	options: { outputOnlyFailed?: boolean },
 ): void {
+	const displayNameOf = (id: string): string => config.tasks[id]?.label ?? id;
+
 	executor.on("taskStart", (taskId: string) => {
-		console.log(chalk.cyan(`[${taskId}] Starting...`));
+		console.log(chalk.cyan(`[${displayNameOf(taskId)}] Starting...`));
 	});
 	executor.on("taskSuccess", (taskId: string, output: string) => {
-		console.log(chalk.green(`[${taskId}] Finished (Success)`));
-		if (!options.outputOnlyFailed) logTaskOutput(taskId, output);
+		const name = displayNameOf(taskId);
+		console.log(chalk.green(`[${name}] Finished (Success)`));
+		if (!options.outputOnlyFailed) logTaskOutput(name, output);
 	});
 	executor.on("taskFail", (taskId: string, _error: unknown, output: string) => {
-		console.log(chalk.red(`[${taskId}] Failed`));
-		logTaskOutput(taskId, output);
+		const name = displayNameOf(taskId);
+		console.log(chalk.red(`[${name}] Failed`));
+		logTaskOutput(name, output);
 	});
 	executor.on("taskSkipped", (taskId: string) => {
-		console.log(chalk.gray(`[${taskId}] Not Started (dependency failed)`));
+		console.log(
+			chalk.gray(`[${displayNameOf(taskId)}] Not Started (dependency failed)`),
+		);
 	});
 }
 
@@ -300,11 +312,17 @@ program
 
 			console.log(chalk.cyan("Available tasks:"));
 			tasks.forEach((task) => {
-				const labels: string[] = [];
-				if (task.tags.length) labels.push(`tags: ${task.tags.join(", ")}`);
-				if (task.group) labels.push(`group: ${task.group}`);
+				const annotations: string[] = [];
+				if (task.tags.length) annotations.push(`tags: ${task.tags.join(", ")}`);
+				if (task.group) annotations.push(`group: ${task.group}`);
+				// Show the label inline with the id when set — the id is still the
+				// canonical handle (used for `dependsOn`, CLI targets, JUnit names),
+				// but the label is what shows up in the TUI sidebar.
+				const header = task.label
+					? `${chalk.bold(task.label)} ${chalk.gray(`(${task.id})`)}`
+					: chalk.bold(task.id);
 				console.log(
-					`- ${chalk.bold(task.id)}: ${task.cmd} ${labels.length ? chalk.gray(`[${labels.join("; ")}]`) : ""}`,
+					`- ${header}: ${task.cmd} ${annotations.length ? chalk.gray(`[${annotations.join("; ")}]`) : ""}`,
 				);
 				if (task.description) {
 					console.log(`  ${chalk.gray(task.description)}`);
@@ -497,6 +515,7 @@ program
 
 			await runLinear(
 				executor,
+				config,
 				options,
 				hasExplicitTarget,
 				ciMode,

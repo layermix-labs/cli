@@ -43,7 +43,8 @@ const renderTaskRow = (
 			</Text>
 			{indent && <Text dimColor>│ </Text>}
 			<Text color={color} wrap="truncate-end">
-				{task.status === "RUNNING" ? <Spinner type="dots" /> : icon} {task.id}
+				{task.status === "RUNNING" ? <Spinner type="dots" /> : icon}{" "}
+				{task.label ?? task.id}
 			</Text>
 		</Box>
 	);

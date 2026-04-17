@@ -196,7 +196,7 @@ const App: React.FC<AppProps> = ({
 		return Array.from(set).sort();
 	}, [allTasks]);
 
-	const tasksMap = useTaskExecutor(executor, allTaskIds);
+	const tasksMap = useTaskExecutor(executor, allTasks);
 	const [columns, rows] = useStdoutDimensions();
 	const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH);
 
@@ -244,14 +244,20 @@ const App: React.FC<AppProps> = ({
 		return map;
 	}, [allTasks]);
 
-	// Case-insensitive substring match against task ids. When no query is set
-	// (search closed, or `/` just opened with an empty buffer) we show every
-	// task so the sidebar doesn't flash empty between keystrokes.
+	// Case-insensitive substring match against task ids *or* labels — a user
+	// renaming a task in the sidebar via `label` still expects to find it by
+	// typing what they see. When no query is set (search closed, or `/` just
+	// opened with an empty buffer) we show every task so the sidebar doesn't
+	// flash empty between keystrokes.
 	const filteredTaskIds = useMemo(() => {
 		if (!searchQuery) return allTaskIds;
 		const q = searchQuery.toLowerCase();
-		return allTaskIds.filter((id) => id.toLowerCase().includes(q));
-	}, [searchQuery, allTaskIds]);
+		return allTaskIds.filter((id) => {
+			if (id.toLowerCase().includes(q)) return true;
+			const label = tasksById[id]?.label;
+			return !!label && label.toLowerCase().includes(q);
+		});
+	}, [searchQuery, allTaskIds, tasksById]);
 
 	// Tasks with no `group` show up in the main Tasks list. Grouped tasks only
 	// appear under their collapsible group header.

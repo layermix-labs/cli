@@ -525,7 +525,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		>
 			{!fullscreen && (
 				<DetailHeader
-					taskId={task.id}
+					taskId={task.label ?? task.id}
 					statusLabel={statusLabel}
 					statusColor={statusColor}
 					description={description}
@@ -546,7 +546,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			{fullscreen ? (
 				<Box width={innerWidth} flexShrink={0}>
 					<Text dimColor>
-						{task.id} [{statusLabel}]{scrollHint}
+						{task.label ?? task.id} [{statusLabel}]{scrollHint}
 					</Text>
 				</Box>
 			) : (

@@ -48,6 +48,11 @@ export type TaskArg = z.infer<typeof TaskArgSchema>;
 const TaskSchema = z.object({
 	id: z.string(),
 	cmd: z.string(),
+	// UI-only display name. When set, used in the sidebar, task detail
+	// header, Overview waterfall, linear log prefixes, and `list` output in
+	// place of `id`. `id` stays canonical for CLI args, `dependsOn`
+	// references, JUnit `testcase` names, and dry-run JSON keys.
+	label: z.string().optional(),
 	description: z.string().optional(),
 	dependsOn: z.array(z.string()).default([]),
 	tags: z.array(z.string()).default([]),
