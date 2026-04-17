@@ -282,7 +282,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 }) => {
 	const [, rows] = useStdoutDimensions();
 	const isFailed = task.status === "FAILURE";
-	const options = optionsForStatus(task.status, hasArgs, hasDeps);
+	// Memoize so identity stays stable across renders. Without useMemo, the
+	// `!hasDeps` branch in optionsForStatus returns a fresh `.filter()` array
+	// every render, which makes the [options]-keyed reset effect below fire
+	// on every render and slam selectedOption back to 0 — so ←/→ never sticks.
+	const options = useMemo(
+		() => optionsForStatus(task.status, hasArgs, hasDeps),
+		[task.status, hasArgs, hasDeps],
+	);
 	const [selectedOption, setSelectedOption] = useState(0);
 	const [message, setMessage] = useState("");
 
