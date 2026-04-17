@@ -3,6 +3,7 @@ import clipboardy from "clipboardy";
 import { Box, type Key, Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import Kbd from "./Kbd.js";
 import { STATUS_COLOR, STATUS_LABEL } from "./status.js";
 import { useMouseWheel } from "./useMouseWheel.js";
 import useStdoutDimensions from "./useStdoutDimensions.js";
@@ -12,6 +13,7 @@ interface TaskDetailProps {
 	task: TaskState;
 	width: number;
 	description?: string;
+	cmd?: string;
 	fullscreen?: boolean;
 	onRun?: () => void;
 	onRunWithDeps?: () => void;
@@ -71,7 +73,9 @@ interface HeaderProps {
 	statusLabel: string;
 	statusColor: string;
 	description?: string;
+	cmd?: string;
 	scrollHint: string;
+	deemphasizeId: boolean;
 }
 
 const DetailHeader: React.FC<HeaderProps> = ({
@@ -79,7 +83,9 @@ const DetailHeader: React.FC<HeaderProps> = ({
 	statusLabel,
 	statusColor,
 	description,
+	cmd,
 	scrollHint,
+	deemphasizeId,
 }) => (
 	<Box
 		marginBottom={1}
@@ -89,14 +95,29 @@ const DetailHeader: React.FC<HeaderProps> = ({
 		borderRight={false}
 		borderColor="gray"
 		flexDirection="column"
+		flexShrink={0}
 	>
-		<Box>
-			<Text bold>Task: {taskId} </Text>
-			<Text color={statusColor}>[{statusLabel}]</Text>
+		<Box flexShrink={0}>
+			{deemphasizeId ? (
+				<>
+					<Text color={statusColor}>[{statusLabel}]</Text>
+					<Text dimColor> {taskId}</Text>
+				</>
+			) : (
+				<>
+					<Text bold>Task: {taskId} </Text>
+					<Text color={statusColor}>[{statusLabel}]</Text>
+				</>
+			)}
 			{scrollHint ? <Text dimColor>{scrollHint}</Text> : null}
 		</Box>
+		{cmd ? (
+			<Text wrap="truncate-end" dimColor>
+				{`$ ${cmd}`}
+			</Text>
+		) : null}
 		{description ? (
-			<Text dimColor wrap="truncate-end">
+			<Text bold wrap="truncate-end">
 				{description}
 			</Text>
 		) : null}
@@ -168,8 +189,20 @@ const DetailFooter: React.FC<FooterProps> = ({
 						Task Failed{" "}
 					</Text>
 				)}
-				<Text dimColor>
-					←/→ Enter · PgUp/PgDn scroll · g/G top/tail · f fullscreen
+				<Text>
+					<Kbd k="←→" />
+					<Text dimColor> menu · </Text>
+					<Kbd k="Enter" />
+					<Kbd k="r" />
+					<Text dimColor> run · </Text>
+					<Kbd k="R" />
+					<Text dimColor> +deps · </Text>
+					<Kbd k="c" />
+					<Text dimColor> copy · </Text>
+					<Kbd k="PgUp/Dn" />
+					<Text dimColor> scroll · </Text>
+					<Kbd k="f" />
+					<Text dimColor> fullscreen</Text>
 				</Text>
 			</Box>
 			{message ? <Text color="green">{message}</Text> : null}
@@ -199,6 +232,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	task,
 	width,
 	description,
+	cmd,
 	fullscreen = false,
 	onRun,
 	onRunWithDeps,
@@ -220,13 +254,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
 	// Chrome budget differs between normal and fullscreen modes.
 	// Normal     = top bar (3) + outer border (2) + header block (3) + footer menu (4) = 12
-	//   +1 row when the task has a description (rendered under the header title).
+	//   +1 row each for command line and description when present.
 	// Fullscreen = top bar (3) + hint line (1)                                          = 4
 	//   (fullscreen drops the outer border + padding so output goes edge-to-edge)
 	const descriptionRow = !fullscreen && description ? 1 : 0;
+	const cmdRow = !fullscreen && cmd ? 1 : 0;
 	const availableHeight = fullscreen
 		? Math.max(5, rows - 4)
-		: Math.max(5, rows - 12 - descriptionRow);
+		: Math.max(5, rows - 12 - descriptionRow - cmdRow);
 
 	const totalLines = task.output.length;
 	const maxScroll = Math.max(0, totalLines - availableHeight);
@@ -355,6 +390,22 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		// Footer menu only exists in non-fullscreen mode.
 		if (fullscreen) return;
 
+		// Single-key shortcuts for the common task actions. These mirror the
+		// footer menu items but don't require arrow+Enter. `R` is shift+r so it
+		// arrives as a distinct character from lowercase `r`.
+		if (input === "r") {
+			onRun?.();
+			return;
+		}
+		if (input === "R") {
+			onRunWithDeps?.();
+			return;
+		}
+		if (input === "c") {
+			copyLogsToClipboard();
+			return;
+		}
+
 		if (key.leftArrow || input === "h") {
 			setSelectedOption((prev) => (prev > 0 ? prev - 1 : options.length - 1));
 		}
@@ -412,7 +463,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 					statusLabel={statusLabel}
 					statusColor={statusColor}
 					description={description}
+					cmd={cmd}
 					scrollHint={scrollHint}
+					deemphasizeId={task.status === "IDLE"}
 				/>
 			)}
 
@@ -426,9 +479,22 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
 			{fullscreen ? (
 				<Box width={innerWidth} flexShrink={0}>
-					<Text dimColor>
-						{task.id} [{statusLabel}]{scrollHint} — ↑/↓ · PgUp/PgDn · Ctrl+U/D ·
-						g/G · f or q to exit
+					<Text>
+						<Text dimColor>
+							{task.id} [{statusLabel}]{scrollHint} —{" "}
+						</Text>
+						<Kbd k="↑↓" />
+						<Text dimColor> · </Text>
+						<Kbd k="PgUp/Dn" />
+						<Text dimColor> · </Text>
+						<Kbd k="Ctrl+U/D" />
+						<Text dimColor> · </Text>
+						<Kbd k="g/G" />
+						<Text dimColor> · </Text>
+						<Kbd k="f" />
+						<Text dimColor>/</Text>
+						<Kbd k="q" />
+						<Text dimColor> exit</Text>
 					</Text>
 				</Box>
 			) : (

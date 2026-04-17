@@ -3,6 +3,7 @@ import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Executor } from "../../core/executor.js";
 import type { Task } from "../../types/config.js";
+import Kbd from "./Kbd.js";
 import Overview from "./Overview.js";
 import TagDetail from "./TagDetail.js";
 import TagList from "./TagList.js";
@@ -44,12 +45,27 @@ const TopBar: React.FC<TopBarProps> = ({ columns, fullscreenLogs }) => (
 		width={columns}
 		flexShrink={0}
 	>
-		<Text bold>My-Runner TUI</Text>
+		<Text bold>LayerMix TUI</Text>
 		<Text> | </Text>
 		{fullscreenLogs ? (
-			<Text>Logs fullscreen — PgUp/PgDn · g/G · f or Esc to exit</Text>
+			<Text>
+				<Text dimColor>Logs fullscreen — </Text>
+				<Kbd k="PgUp/Dn" />
+				<Text dimColor> scroll · </Text>
+				<Kbd k="g/G" />
+				<Text dimColor> top/tail · </Text>
+				<Kbd k="f" />
+				<Text dimColor>/</Text>
+				<Kbd k="Esc" />
+				<Text dimColor> exit</Text>
+			</Text>
 		) : (
-			<Text>Nav: Arrows/hjkl | Run: Enter | Quit: Ctrl+C</Text>
+			<Text>
+				<Kbd k="↑↓" />
+				<Text dimColor> nav · </Text>
+				<Kbd k="q" />
+				<Text dimColor> quit</Text>
+			</Text>
 		)}
 	</Box>
 );
@@ -181,6 +197,13 @@ const App: React.FC<AppProps> = ({
 		// the task selection.
 		if (fullscreenLogs) return;
 
+		// Global quit. TaskDetail owns `q` while fullscreen (exits fullscreen),
+		// so we only reach here outside that mode thanks to the guard above.
+		if (input === "q") {
+			quit();
+			return;
+		}
+
 		if (key.upArrow || input === "k") {
 			setSelectedIndex((prev) => (prev > 0 ? prev - 1 : navItems.length - 1));
 			return;
@@ -189,7 +212,8 @@ const App: React.FC<AppProps> = ({
 			setSelectedIndex((prev) => (prev < navItems.length - 1 ? prev + 1 : 0));
 			return;
 		}
-		if (key.return && selected.kind === "tag") {
+		// Enter or `r` schedules a tag. Task shortcuts live in TaskDetail.
+		if ((key.return || input === "r") && selected.kind === "tag") {
 			executor.scheduleRun(undefined, selected.name);
 		}
 	});
@@ -206,6 +230,7 @@ const App: React.FC<AppProps> = ({
 				<TaskDetail
 					task={tasksMap[selected.id] ?? idleTask(selected.id)}
 					description={tasksById[selected.id]?.description}
+					cmd={tasksById[selected.id]?.cmd}
 					width={contentWidth}
 					onRun={() => executor.scheduleTask(selected.id)}
 					onRunWithDeps={() => executor.scheduleRun([selected.id])}
@@ -232,6 +257,7 @@ const App: React.FC<AppProps> = ({
 			<TaskDetail
 				task={tasksMap[selected.id] ?? idleTask(selected.id)}
 				description={tasksById[selected.id]?.description}
+				cmd={tasksById[selected.id]?.cmd}
 				width={columns}
 				fullscreen
 				onToggleFullscreen={() => setFullscreenLogs(false)}
