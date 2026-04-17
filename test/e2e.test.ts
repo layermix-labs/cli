@@ -230,7 +230,7 @@ describe("CLI e2e", () => {
 				fs.readFileSync(path.join(tmp, "task-runner.json"), "utf8"),
 			);
 			expect(written.$schema).toBe(
-				"https://unpkg.com/@layermix/cli@2.1.0/schema.json",
+				"https://unpkg.com/@layermix/cli@2.2.0/schema.json",
 			);
 			expect(Array.isArray(written.tasks)).toBe(true);
 			expect(fs.existsSync(path.join(tmp, "schema.json"))).toBe(false);

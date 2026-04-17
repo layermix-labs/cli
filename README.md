@@ -34,7 +34,7 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
 
 ```json
 {
-  "$schema": "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
+  "$schema": "https://unpkg.com/@layermix/cli@2.2.0/schema.json",
   "defaultRun": "-t test",
   "tasks": [
     { "id": "clean",   "cmd": "rm -rf dist",   "dependsOn": [],                  "group": "build" },

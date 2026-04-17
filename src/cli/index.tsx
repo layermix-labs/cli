@@ -282,7 +282,7 @@ const program = new Command();
 program
 	.name("layermix")
 	.description("A simple DAG-based task runner")
-	.version("2.1.0");
+	.version("2.2.0");
 
 program
 	.command("list")
@@ -383,7 +383,7 @@ program
 			}
 
 			const starter = {
-				$schema: "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
+				$schema: "https://unpkg.com/@layermix/cli@2.2.0/schema.json",
 				tasks: [
 					{ id: "hello", cmd: "echo hello", dependsOn: [], tags: ["example"] },
 					{
