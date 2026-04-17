@@ -176,6 +176,9 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "defaultRun": {
+      "type": "string"
     }
   },
   "required": [

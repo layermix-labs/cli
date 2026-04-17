@@ -62,6 +62,7 @@ export class ConfigLoader {
 			env: config.env,
 			tags: config.tags,
 			groups: config.groups,
+			defaultRun: config.defaultRun,
 		};
 	}
 
@@ -78,6 +79,10 @@ export class ConfigLoader {
 			merged.tasks = { ...merged.tasks, ...config.tasks };
 			merged.tags = { ...merged.tags, ...config.tags };
 			merged.groups = { ...merged.groups, ...config.groups };
+			// Closer-wins like everything else (configs are merged in
+			// outer→inner order, so inner overwrites).
+			if (config.defaultRun !== undefined)
+				merged.defaultRun = config.defaultRun;
 		}
 
 		return merged;

@@ -73,6 +73,11 @@ export const ConfigSchema = z.object({
 	// Optional dictionary of group descriptions keyed by group name —
 	// mirrors `tags`. Group membership lives on the task via `group`.
 	groups: z.object({}).catchall(z.string()).optional().default({}),
+	// CLI-style fallback target used in non-TUI modes when the user didn't
+	// supply task ids or `-t <tag>`. Examples: `"-t test"`, `"build"`,
+	// `"build deploy"`. Bypassed entirely when the user opens an interactive
+	// TUI session (idle TUI is preserved as the explicit "no target" UX).
+	defaultRun: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -82,4 +87,5 @@ export interface NormalizedConfig {
 	env: Record<string, string>;
 	tags: Record<string, string>;
 	groups: Record<string, string>;
+	defaultRun?: string;
 }

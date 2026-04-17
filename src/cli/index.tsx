@@ -13,6 +13,7 @@ import {
 	writeJUnitReport,
 } from "../core/junit-report.js";
 import { TaskGraph } from "../core/task-graph.js";
+import { parseDefaultRun } from "./default-run.js";
 import App from "./ui/App.js";
 import {
 	disableMouseReporting,
@@ -180,25 +181,27 @@ async function runTui(
 }
 
 // Linear (non-TUI) path: wire console logging, honor the no-target hint when
-// not in CI mode, otherwise execute and bubble exit code.
+// not in CI mode, otherwise execute and bubble exit code. `tag` is passed
+// separately from `options` because `defaultRun` may have synthesized one.
 async function runLinear(
 	executor: Executor,
-	options: { outputOnlyFailed?: boolean; tag?: string },
+	options: { outputOnlyFailed?: boolean },
 	hasExplicitTarget: boolean,
 	ciMode: boolean,
 	targetIds: string[] | undefined,
+	tag: string | undefined,
 	flushJunit: () => void,
 ): Promise<void> {
 	wireLinearLogging(executor, options);
 	if (!hasExplicitTarget && !ciMode) {
 		console.log(
 			chalk.yellow(
-				"No tasks specified. Pass task ids or -t <tag>, or run `layermix list` to see available tasks.",
+				"No tasks specified. Pass task ids or -t <tag>, set `defaultRun` in task-runner.json, or run `layermix list` to see available tasks.",
 			),
 		);
 		return;
 	}
-	const success = await executor.execute(targetIds, options.tag);
+	const success = await executor.execute(targetIds, tag);
 	flushJunit();
 	if (!success) process.exit(1);
 }
@@ -453,13 +456,27 @@ program
 				options,
 				ciMode,
 			);
-			const hasExplicitTarget = taskIds.length > 0 || !!options.tag;
-			const targetIds = taskIds.length ? taskIds : undefined;
 			const cliArgs: string[] = options.arg ?? [];
 
-			applyCliArgs(executor, cliArgs, targetIds, options.tag);
+			let hasExplicitTarget = taskIds.length > 0 || !!options.tag;
+			let targetIds: string[] | undefined = taskIds.length
+				? taskIds
+				: undefined;
+			let tag: string | undefined = options.tag;
 
 			const useTui = process.stdout.isTTY && !ciMode;
+			// `defaultRun` only kicks in for non-TUI sessions with no
+			// user-supplied target. TUI sessions stay idle so the user keeps
+			// the explicit "pick what to run" UX.
+			if (!hasExplicitTarget && !useTui && config.defaultRun) {
+				const parsed = parseDefaultRun(config.defaultRun);
+				targetIds = parsed.taskIds;
+				tag = parsed.tag;
+				hasExplicitTarget = !!targetIds || !!tag;
+			}
+
+			applyCliArgs(executor, cliArgs, targetIds, tag);
+
 			if (useTui) {
 				await runTui(
 					executor,
@@ -467,7 +484,7 @@ program
 					hasExplicitTarget
 						? {
 								taskIds: targetIds,
-								tag: options.tag,
+								tag,
 								// Skip the picker for the initial CLI invocation when values
 								// were already supplied via --arg; otherwise the flag is a noop.
 								cliArgsProvided: cliArgs.length > 0,
@@ -484,6 +501,7 @@ program
 				hasExplicitTarget,
 				ciMode,
 				targetIds,
+				tag,
 				flushJunit,
 			);
 		} catch (error) {

@@ -1,0 +1,7 @@
+{
+  "defaultRun": "only-this",
+  "tasks": [
+    { "id": "only-this", "cmd": "echo single-default-ran", "tags": [] },
+    { "id": "noisy", "cmd": "echo noisy-ran", "tags": [] }
+  ]
+}

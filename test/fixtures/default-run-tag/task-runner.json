@@ -1,0 +1,8 @@
+{
+  "defaultRun": "-t gate",
+  "tasks": [
+    { "id": "gate-a", "cmd": "echo gate-a-ran", "tags": ["gate"] },
+    { "id": "gate-b", "cmd": "echo gate-b-ran", "tags": ["gate"] },
+    { "id": "outside", "cmd": "echo outside-ran", "tags": [] }
+  ]
+}

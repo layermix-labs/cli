@@ -45,6 +45,8 @@ describe("CLI e2e", () => {
 	const simple = path.join(FIXTURES, "simple");
 	const failing = path.join(FIXTURES, "failing");
 	const withArgs = path.join(FIXTURES, "with-args");
+	const defaultRunTag = path.join(FIXTURES, "default-run-tag");
+	const defaultRunTask = path.join(FIXTURES, "default-run-task");
 
 	it("list prints defined tasks", async () => {
 		const res = await runCli(["list"], simple);
@@ -261,6 +263,41 @@ describe("CLI e2e", () => {
 		);
 		expect(res.exitCode).toBe(1);
 		expect(res.stderr).toContain("--arg can only be used with a single task");
+	});
+
+	it("defaultRun '-t TAG' kicks in when CI mode has no explicit target", async () => {
+		const res = await runCli(["--ci"], defaultRunTag);
+		expect(res.exitCode).toBe(0);
+		// Tag-only run: gate-a + gate-b execute, the untagged "outside" task
+		// stays untouched.
+		expect(res.stdout).toContain("gate-a-ran");
+		expect(res.stdout).toContain("gate-b-ran");
+		expect(res.stdout).not.toContain("outside-ran");
+	});
+
+	it("explicit CLI target overrides defaultRun", async () => {
+		const res = await runCli(["--ci", "outside"], defaultRunTag);
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("outside-ran");
+		expect(res.stdout).not.toContain("gate-a-ran");
+	});
+
+	it("defaultRun 'task-id' picks just that task in CI mode", async () => {
+		const res = await runCli(["--ci"], defaultRunTask);
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("single-default-ran");
+		expect(res.stdout).not.toContain("noisy-ran");
+	});
+
+	it("defaultRun applies in piped non-CI mode (no hint, no run-all)", async () => {
+		// No --ci, but stdin/stdout aren't a TTY because we pipe them — that's
+		// the "linear non-CI" branch, where without defaultRun we'd print the
+		// "No tasks specified" hint and exit 0. With defaultRun we should run
+		// the configured target instead.
+		const res = await runCli([], defaultRunTask);
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("single-default-ran");
+		expect(res.stdout).not.toContain("No tasks specified");
 	});
 
 	it("init refuses to overwrite without --force", async () => {

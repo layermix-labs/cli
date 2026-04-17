@@ -22,75 +22,47 @@
 			"dependsOn": [],
 			"group": "build"
 		},
-
 		{
-			"id": "check",
+			"id": "biome check",
 			"cmd": "biome check src scripts test",
 			"description": "Read-only Biome check (lint + format) across the repo.",
 			"dependsOn": [],
-			"tags": ["test"],
-			"group": "lint"
+			"tags": ["test"]
 		},
-		{
-			"id": "fix",
-			"cmd": "biome check --write src scripts test",
-			"description": "Auto-fix Biome lint and formatting issues across the repo.",
-			"dependsOn": [],
-			"group": "lint"
-		},
-		{
-			"id": "fix-file",
-			"cmd": "biome check --write $1",
-			"description": "Auto-fix Biome lint and formatting issues for a single source file.",
-			"dependsOn": [],
-			"group": "lint",
-			"args": [
-				{
-					"type": "file",
-					"label": "File to fix",
-					"glob": "{src,scripts,test}/**/*.{ts,tsx,json}"
-				}
-			]
-		},
-
 		{
 			"id": "typecheck",
 			"cmd": "tsgo --noEmit -p tsconfig.check.json",
 			"description": "Type-check the project with tsgo (Microsoft's native TS preview) without emitting output.",
 			"dependsOn": [],
-			"tags": ["test"],
-			"group": "typecheck"
+			"tags": ["test"]
 		},
-		{
-			"id": "typecheck:watch",
-			"cmd": "tsgo --noEmit -p tsconfig.check.json --watch",
-			"description": "Long-running tsgo watcher. Output streams into the log pane; kill with K to stop.",
-			"dependsOn": [],
-			"group": "typecheck"
-		},
-
-		{
-			"id": "fallow",
-			"cmd": "fallow",
-			"description": "Default fallow run — detect unused exports and dead code.",
-			"dependsOn": [],
-			"tags": ["test"],
-			"group": "fallow"
-		},
-		{
-			"id": "audit",
-			"cmd": "fallow audit",
-			"description": "Full fallow audit (dead code + duplicates + dependency health).",
-			"dependsOn": [],
-			"group": "fallow"
-		},
-
 		{
 			"id": "test",
 			"cmd": "vitest run",
 			"description": "Run the full Vitest suite once (unit + e2e) in non-watch mode.",
 			"dependsOn": [],
 			"tags": ["test"]
+		},
+		{
+			"id": "fallow",
+			"cmd": "fallow",
+			"description": "Full fallow audit (dead code + duplicates + dependency health).",
+			"dependsOn": [],
+			"tags": ["test"]
+		},
+		{
+			"id": "fallow fix",
+			"cmd": "fallow fix --yes",
+			"description": "Full fallow audit (dead code + duplicates + dependency health).",
+			"dependsOn": [],
+			"tags": ["fix"]
+		},
+		{
+			"id": "biome fix",
+			"cmd": "biome check --unsafe --write src scripts test",
+			"description": "Auto-fix Biome lint and formatting issues across the repo.",
+			"dependsOn": [],
+			"tags": ["fix"]
 		},
 		{
 			"id": "test-file",
@@ -115,12 +87,10 @@
 		"NODE_ENV": "development"
 	},
 	"tags": {
-		"test": "Quality gates run by CI: check, typecheck, fallow, test."
+		"test": "Quality gates run by CI: check, typecheck, fallow, test.",
+		"fix": "Apply all autofixes - might be unsafe"
 	},
 	"groups": {
-		"build": "Build artifacts: clean dist, compile to JS + chmod the bin, regenerate schema.",
-		"lint": "Biome lint + format (read-only check, repo-wide fix, single-file fix).",
-		"typecheck": "tsgo type-checking (one-shot + watch mode).",
-		"fallow": "Dead-code, duplicates, and dependency-health audits."
+		"build": "Build artifacts: clean dist, compile to JS + chmod the bin, regenerate schema."
 	}
 }
