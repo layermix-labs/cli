@@ -44,6 +44,7 @@ async function withJunitTempDir<T>(
 describe("CLI e2e", () => {
 	const simple = path.join(FIXTURES, "simple");
 	const failing = path.join(FIXTURES, "failing");
+	const withArgs = path.join(FIXTURES, "with-args");
 
 	it("list prints defined tasks", async () => {
 		const res = await runCli(["list"], simple);
@@ -232,6 +233,32 @@ describe("CLI e2e", () => {
 		} finally {
 			fs.rmSync(tmp, { recursive: true, force: true });
 		}
+	});
+
+	it("--arg fills positional placeholders into the cmd", async () => {
+		const res = await runCli(
+			["echo-name", "--ci", "-a", "Vito", "-a", "tui"],
+			withArgs,
+		);
+		expect(res.exitCode).toBe(0);
+		// Shell-quoting wraps each value in single quotes. echo strips the quotes.
+		expect(res.stdout).toContain("greet Vito from tui");
+	});
+
+	it("falls back to declared default when --arg is omitted", async () => {
+		const res = await runCli(["echo-default", "--ci"], withArgs);
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("fallback");
+	});
+
+	it("--arg errors out when targeting more than one task", async () => {
+		const res = await runCli(
+			["echo-name", "echo-default", "-a", "x"],
+			withArgs,
+			{ CI: "1" },
+		);
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain("--arg can only be used with a single task");
 	});
 
 	it("init refuses to overwrite without --force", async () => {

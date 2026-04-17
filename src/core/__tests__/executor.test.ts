@@ -250,6 +250,48 @@ describe("Executor", () => {
 		expect(executor.killTask("task-a")).toBe(false);
 	});
 
+	it("setTaskArgs substitutes values into the cmd before execa runs it", async () => {
+		mockTasks["task-with-args"] = {
+			id: "task-with-args",
+			cmd: "playwright test $1 --grep $2",
+			dependsOn: [],
+			tags: [],
+			args: [
+				{ type: "file", glob: "**/*.spec.ts", multiple: false },
+				{ type: "text", default: "smoke" },
+			],
+		};
+		const config = { tasks: mockTasks, env: {}, tags: {}, groups: {} };
+		const argsGraph = new TaskGraph(config);
+		const executor = new Executor(argsGraph);
+
+		executor.setTaskArgs("task-with-args", ["tests/foo.spec.ts", "my pattern"]);
+		await executor.execute(["task-with-args"]);
+
+		const calls = execaMock.mock.calls.map((c) => c[0]);
+		expect(calls).toContain(
+			"playwright test 'tests/foo.spec.ts' --grep 'my pattern'",
+		);
+	});
+
+	it("falls back to defaults when args aren't supplied", async () => {
+		mockTasks["task-defaults"] = {
+			id: "task-defaults",
+			cmd: "echo $1",
+			dependsOn: [],
+			tags: [],
+			args: [{ type: "text", default: "hello" }],
+		};
+		const config = { tasks: mockTasks, env: {}, tags: {}, groups: {} };
+		const argsGraph = new TaskGraph(config);
+		const executor = new Executor(argsGraph);
+
+		await executor.execute(["task-defaults"]);
+
+		const calls = execaMock.mock.calls.map((c) => c[0]);
+		expect(calls).toContain("echo 'hello'");
+	});
+
 	it("scheduleRun is additive: already-completed tasks are not re-run", async () => {
 		const executor = new Executor(graph);
 		const added: string[] = [];

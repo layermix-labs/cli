@@ -77,6 +77,7 @@
 		"ink-spinner": "^5.0.0",
 		"is-ci": "^4.1.0",
 		"react": "^19.2.3",
+		"tinyglobby": "^0.2.16",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.9.3",
 		"zod": "^4.3.5"

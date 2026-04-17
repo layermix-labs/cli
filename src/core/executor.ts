@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import type { Task } from "../types/config.js";
+import { resolveArgValues, substituteCmd } from "./cmd-args.js";
 import type { TaskGraph } from "./task-graph.js";
 import { TaskRunner } from "./task-runner.js";
 
@@ -41,6 +42,11 @@ export class Executor extends EventEmitter {
 	// Tasks in this set bypass the dependency check once, so `scheduleTask`
 	// can fire a single task on demand regardless of upstream state.
 	private forceRun = new Set<string>();
+	// Pending arg values per task, keyed by task id. Set via setTaskArgs()
+	// before scheduling; consumed (and cleared) by startTask. Persists across
+	// retries — re-running a task uses the last collected values, which matches
+	// the TUI's "Retry" button intent.
+	private taskArgs = new Map<string, (string | string[] | undefined)[]>();
 
 	private isProcessing = false;
 	private processQueuePromise: Promise<void> | null = null;
@@ -177,6 +183,16 @@ export class Executor extends EventEmitter {
 	}
 
 	/**
+	 * Stores positional arg values for the next execution of `taskId`. Values
+	 * are 1:1 with the task's declared `args` (entry 0 → `$1`, etc.). `undefined`
+	 * entries fall back to the arg's `default`. Multi-select file/folder values
+	 * arrive as `string[]`. Call this before `scheduleTask` / `scheduleRun`.
+	 */
+	setTaskArgs(taskId: string, values: (string | string[] | undefined)[]): void {
+		this.taskArgs.set(taskId, values);
+	}
+
+	/**
 	 * Terminates a running task. Returns true if a kill signal was sent.
 	 * The task flows through the normal failure path (taskFail event,
 	 * downstream dependents cascade-skip). Safe no-op if the task isn't
@@ -290,8 +306,9 @@ export class Executor extends EventEmitter {
 
 		this.emit("taskStart", taskId);
 
+		const argValues = this.taskArgs.get(taskId);
 		const promise = runner
-			.execute()
+			.execute(argValues)
 			.then(() => {
 				this.completed.add(taskId);
 				this.emit("taskSuccess", taskId, runner.output);
@@ -377,15 +394,37 @@ export class Executor extends EventEmitter {
 
 	private resolveTask(id: string, task: Task, rootDir: string): ResolvedTask {
 		const globalEnv = this.options.globalEnv || {};
+		const argValues = this.taskArgs.get(id);
+		const cmd =
+			task.args && task.args.length > 0
+				? this.resolveCmdForDryRun(task, argValues)
+				: task.cmd;
 		return {
 			id,
-			cmd: task.cmd,
+			cmd,
 			cwd: path.resolve(rootDir, task.cwd || "."),
 			env: { ...globalEnv, ...(task.env || {}) },
 			dependsOn: task.dependsOn,
 			dependencies: Array.from(this.graph.getAllDependencies(id)),
 			tags: task.tags,
 		};
+	}
+
+	// Dry-run cmd substitution must not throw — partial / missing arg values
+	// are normal here (the caller is asking "what would run?", not "run it
+	// now"). Unfilled placeholders stay as `$N` so the user can see exactly
+	// which inputs they still need to supply.
+	private resolveCmdForDryRun(
+		task: Task,
+		argValues?: (string | string[] | undefined)[],
+	): string {
+		try {
+			const declared = task.args ?? [];
+			const resolved = resolveArgValues(declared, argValues ?? []);
+			return substituteCmd(task.cmd, resolved);
+		} catch {
+			return task.cmd;
+		}
 	}
 
 	getDryRunJson(targetTaskIds?: string[], tag?: string): ExecutionPlan {

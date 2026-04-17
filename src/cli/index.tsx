@@ -342,6 +342,12 @@ program
 		"--junit <path>",
 		"Write a JUnit XML report to the given path on exit (consumed by GitLab CI artifacts:reports:junit, GitHub Actions test reporters, etc.)",
 	)
+	.option(
+		"-a, --arg <value>",
+		"Positional arg value for the target task. Repeat in order ($1, $2, ...). Use comma-separated values for multi-select file/folder args, e.g. -a 'a.spec.ts,b.spec.ts'.",
+		(value: string, prev: string[] = []) => prev.concat([value]),
+		[] as string[],
+	)
 	.action(async (taskIds, options) => {
 		try {
 			const loader = new ConfigLoader();
@@ -377,6 +383,30 @@ program
 			const hasExplicitTarget = taskIds.length > 0 || !!options.tag;
 			const targetIds = taskIds.length ? taskIds : undefined;
 
+			// CLI --arg flags only apply when there's exactly one target task.
+			// Otherwise we'd silently misroute values (which task does $1 belong
+			// to?). For tag runs / multi-task runs / CI auto-run, args must come
+			// from the task's `default` fields.
+			const cliArgs: string[] = options.arg ?? [];
+			if (cliArgs.length > 0) {
+				if (!targetIds || targetIds.length !== 1) {
+					exitWithError(
+						new Error(
+							"--arg can only be used with a single task target (got " +
+								`${targetIds?.length ?? 0} ids${options.tag ? ` plus tag ${options.tag}` : ""})`,
+						),
+					);
+				}
+				// Each --arg entry maps to one positional. A comma in the value
+				// flips that entry into a multi-value list (file/folder args
+				// expecting `multiple: true`). Single values stay as plain strings
+				// so file args without `multiple` still work.
+				const values: (string | string[])[] = cliArgs.map((v) =>
+					v.includes(",") ? v.split(",").map((p) => p.trim()) : v,
+				);
+				executor.setTaskArgs(targetIds[0], values);
+			}
+
 			if (useTui) {
 				const allTasks = Object.values(config.tasks);
 				enterAltScreen();
@@ -387,13 +417,22 @@ program
 						allTasks={allTasks}
 						tagDescriptions={config.tags}
 						groupDescriptions={config.groups}
+						rootDir={process.cwd()}
+						initialRun={
+							hasExplicitTarget
+								? {
+										taskIds: targetIds,
+										tag: options.tag,
+										// Skip the picker for the initial CLI invocation when
+										// values were already supplied via --arg; otherwise the
+										// CLI flag would be a noop.
+										cliArgsProvided: cliArgs.length > 0,
+									}
+								: undefined
+						}
 					/>,
 					{ patchConsole: false },
 				);
-
-				if (hasExplicitTarget) {
-					executor.execute(targetIds, options.tag);
-				}
 
 				await app.waitUntilExit();
 				disableMouseReporting();

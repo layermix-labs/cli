@@ -1,8 +1,10 @@
+import path from "node:path";
 import { Box, type Key, Text, useApp, useInput } from "ink";
 import type React from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Executor } from "../../core/executor.js";
 import type { Task } from "../../types/config.js";
+import ArgsPicker from "./ArgsPicker.js";
 import Kbd from "./Kbd.js";
 import Overview from "./Overview.js";
 import Sidebar, { type NavItem } from "./Sidebar.js";
@@ -18,6 +20,28 @@ interface AppProps {
 	allTasks: Task[];
 	tagDescriptions?: Record<string, string>;
 	groupDescriptions?: Record<string, string>;
+	rootDir?: string;
+	// Initial CLI-driven invocation. When set, App decides on mount whether to
+	// execute immediately (no args declared, or --arg was supplied) or to
+	// open the picker overlay first (single task with declared args). Cleared
+	// after the decision is made — interactive runs from the sidebar use the
+	// regular launch() path.
+	initialRun?: {
+		taskIds?: string[];
+		tag?: string;
+		cliArgsProvided?: boolean;
+	};
+}
+
+// Picker is gated on the task having declared args. Returned modes mirror
+// the two run paths: "run" → scheduleTask (single task, no deps); "runWithDeps"
+// → scheduleRun([id], force). Same shape as the existing onRun / onRunWithDeps
+// callbacks so flow stays parallel.
+type PickerMode = "run" | "runWithDeps";
+
+interface PickerState {
+	taskId: string;
+	mode: PickerMode;
 }
 
 const idleTask = (id: string): TaskState => ({
@@ -151,6 +175,8 @@ const App: React.FC<AppProps> = ({
 	allTasks,
 	tagDescriptions = {},
 	groupDescriptions = {},
+	rootDir = process.cwd(),
+	initialRun,
 }) => {
 	const { exit } = useApp();
 
@@ -187,6 +213,9 @@ const App: React.FC<AppProps> = ({
 	const [expandedTags, setExpandedTags] = useState<Set<string>>(
 		() => new Set(),
 	);
+	// Open args-picker overlay (null when no task is awaiting input). When set,
+	// App's own input handler is suppressed and the picker captures keys.
+	const [pickerState, setPickerState] = useState<PickerState | null>(null);
 
 	const tasksById = useMemo(() => {
 		const map: Record<string, Task> = {};
@@ -328,6 +357,30 @@ const App: React.FC<AppProps> = ({
 		if (selected.kind !== "task") setFullscreenLogs(false);
 	}, [selected.kind]);
 
+	// One-shot CLI-driven kickoff. Runs only on mount — the regular launch()
+	// path handles every subsequent interactive run. The decision tree:
+	//   • no initialRun → idle TUI (user picks tasks themselves)
+	//   • single task with declared args + no --arg → open picker first so the
+	//     user fills in $1..$N before the task runs (the previous behavior of
+	//     calling executor.execute immediately would fail at resolveArgValues)
+	//   • everything else → execute as before
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only run on first mount; later interactive runs go through launch()/scheduleRun.
+	useEffect(() => {
+		if (!initialRun) return;
+		const { taskIds, tag, cliArgsProvided } = initialRun;
+		if (!taskIds && !tag) return;
+
+		if (!cliArgsProvided && !tag && taskIds && taskIds.length === 1) {
+			const task = tasksById[taskIds[0]];
+			if (task?.args && task.args.length > 0) {
+				setPickerState({ taskId: taskIds[0], mode: "runWithDeps" });
+				return;
+			}
+		}
+
+		executor.execute(taskIds, tag);
+	}, []);
+
 	// Every keystroke that changes the query re-anchors selection to the first
 	// match. Without this the cursor would stay on wherever it was before the
 	// filter shrank, which means the highlighted row often isn't even visible.
@@ -385,6 +438,10 @@ const App: React.FC<AppProps> = ({
 
 	useInput((input, key) => {
 		if (input === "c" && key.ctrl) quit();
+
+		// Picker owns input completely while open. Bail before any other
+		// handler so its sub-component's useInput is the only listener.
+		if (pickerState !== null) return;
 
 		if (searchMode) {
 			handleSearchInput(input, key);
@@ -471,17 +528,34 @@ const App: React.FC<AppProps> = ({
 			);
 		}
 		if (selected.kind === "task") {
+			const task = tasksById[selected.id];
+			const hasArgs = !!task?.args && task.args.length > 0;
+			const hasDeps = !!task?.dependsOn && task.dependsOn.length > 0;
+			const launch = (mode: PickerMode) => {
+				if (hasArgs) {
+					setPickerState({ taskId: selected.id, mode });
+					return;
+				}
+				if (mode === "run") executor.scheduleTask(selected.id);
+				else executor.scheduleRun([selected.id], undefined, { force: true });
+			};
+			// "Rerun" replays the same args without prompting. Args were stored on
+			// the executor by the picker (or the CLI --arg flag); scheduleTask
+			// re-uses them directly. Visible only when hasArgs, so we never
+			// dispatch this for a no-args task.
+			const rerun = () => executor.scheduleTask(selected.id);
 			return (
 				<TaskDetail
 					task={tasksMap[selected.id] ?? idleTask(selected.id)}
-					description={tasksById[selected.id]?.description}
-					cmd={tasksById[selected.id]?.cmd}
+					description={task?.description}
+					cmd={task?.cmd}
 					width={contentWidth}
-					inputLocked={searchMode}
-					onRun={() => executor.scheduleTask(selected.id)}
-					onRunWithDeps={() =>
-						executor.scheduleRun([selected.id], undefined, { force: true })
-					}
+					inputLocked={searchMode || pickerState !== null}
+					hasArgs={hasArgs}
+					hasDeps={hasDeps}
+					onRun={() => launch("run")}
+					onRerun={rerun}
+					onRunWithDeps={() => launch("runWithDeps")}
 					onRetry={() => executor.retry(selected.id)}
 					onKill={() => executor.killTask(selected.id)}
 					onClose={() => setSelectedIndex(0)}
@@ -512,6 +586,37 @@ const App: React.FC<AppProps> = ({
 
 	const isFullscreenTask = fullscreenLogs && selected.kind === "task";
 
+	const handlePickerSubmit = (
+		values: (string | string[] | undefined)[],
+	): void => {
+		if (!pickerState) return;
+		const { taskId, mode } = pickerState;
+		executor.setTaskArgs(taskId, values);
+		if (mode === "run") executor.scheduleTask(taskId);
+		else executor.scheduleRun([taskId], undefined, { force: true });
+		setPickerState(null);
+		// Land the cursor on the launched task so its log pane is what the user
+		// sees streaming. Without this the selection stays on Overview (or
+		// wherever the user was) and the just-started task is offscreen.
+		const idx = navItems.findIndex(
+			(it) => it.kind === "task" && it.id === taskId,
+		);
+		if (idx >= 0) setSelectedIndex(idx);
+	};
+
+	const pickerTask = pickerState ? tasksById[pickerState.taskId] : null;
+	const pickerOverlay =
+		pickerState && pickerTask?.args && pickerTask.args.length > 0 ? (
+			<ArgsPicker
+				taskId={pickerState.taskId}
+				args={pickerTask.args}
+				cwd={path.resolve(rootDir, pickerTask.cwd ?? ".")}
+				width={contentWidth}
+				onSubmit={handlePickerSubmit}
+				onCancel={() => setPickerState(null)}
+			/>
+		) : null;
+
 	// Body is either the fullscreen task view or the sidebar/content split.
 	// No outer frame means content extends flush to the terminal edges; the
 	// only divider left is the horizontal line below the top bar.
@@ -537,7 +642,7 @@ const App: React.FC<AppProps> = ({
 				searchQuery={searchQuery}
 			/>
 			<Box width={contentWidth} flexDirection="column" flexShrink={0}>
-				{renderContentPane()}
+				{pickerOverlay ?? renderContentPane()}
 			</Box>
 		</Box>
 	);

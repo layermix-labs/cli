@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { execa, type ResultPromise } from "execa";
 import type { Task } from "../types/config.js";
+import { resolveArgValues, substituteCmd } from "./cmd-args.js";
 
 export type TaskStatus =
 	| "IDLE"
@@ -44,15 +45,16 @@ export class TaskRunner extends EventEmitter {
 		return true;
 	}
 
-	async execute(): Promise<void> {
+	async execute(argValues?: (string | string[] | undefined)[]): Promise<void> {
 		this._status = "RUNNING";
 		this._stdout = [];
 		this._stderr = [];
 
 		try {
 			const env = { ...process.env, ...(this.task.env || {}) };
+			const cmd = this.buildCmd(argValues);
 
-			this.process = execa(this.task.cmd, {
+			this.process = execa(cmd, {
 				shell: true,
 				cwd: this.task.cwd || process.cwd(),
 				env,
@@ -90,6 +92,17 @@ export class TaskRunner extends EventEmitter {
 		} finally {
 			this.process = null;
 		}
+	}
+
+	// Resolve declared args + caller values into the final cmd. When the task
+	// declares no args, `cmd` is used as-is; otherwise we shell-quote each
+	// value and substitute `$1`, `$2`, ... placeholders. Throws via
+	// `resolveArgValues` if a required arg is missing — surfaces as taskFail.
+	private buildCmd(argValues?: (string | string[] | undefined)[]): string {
+		const declared = this.task.args ?? [];
+		if (declared.length === 0) return this.task.cmd;
+		const resolved = resolveArgValues(declared, argValues ?? []);
+		return substituteCmd(this.task.cmd, resolved);
 	}
 
 	skip() {

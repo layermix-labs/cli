@@ -46,6 +46,39 @@
 			"tags": ["test"]
 		},
 		{
+			"id": "test-file",
+			"cmd": "vitest run $1 -t $2",
+			"description": "Run a single Vitest file, optionally filtered by test-name pattern.",
+			"dependsOn": [],
+			"tags": ["test"],
+			"args": [
+				{
+					"type": "file",
+					"label": "Test file",
+					"glob": "{src,test}/**/*.test.ts"
+				},
+				{
+					"type": "text",
+					"label": "Test name pattern (-t)",
+					"default": ""
+				}
+			]
+		},
+		{
+			"id": "fix-file",
+			"cmd": "biome check --write $1",
+			"description": "Auto-fix lint and formatting issues for a single source file.",
+			"dependsOn": [],
+			"tags": [],
+			"args": [
+				{
+					"type": "file",
+					"label": "File to fix",
+					"glob": "{src,scripts,test}/**/*.{ts,tsx,json}"
+				}
+			]
+		},
+		{
 			"id": "bundle",
 			"cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
 			"description": "Bundle the compiled entry point into a single dist/bundle.js via esbuild.",

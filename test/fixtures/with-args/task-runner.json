@@ -1,0 +1,23 @@
+{
+  "tasks": [
+    {
+      "id": "echo-name",
+      "cmd": "echo greet $1 from $2",
+      "dependsOn": [],
+      "tags": [],
+      "args": [
+        { "type": "text", "label": "Name" },
+        { "type": "select", "label": "Source", "choices": ["cli", "tui"], "default": "cli" }
+      ]
+    },
+    {
+      "id": "echo-default",
+      "cmd": "echo $1",
+      "dependsOn": [],
+      "tags": [],
+      "args": [
+        { "type": "text", "default": "fallback" }
+      ]
+    }
+  ]
+}

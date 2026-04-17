@@ -19,7 +19,16 @@ interface TaskDetailProps {
 	// so typed characters build the query instead of triggering shortcuts
 	// like `r` (Run) or `c` (Copy Logs).
 	inputLocked?: boolean;
+	// True when the task declares positional `args`. Adds extra menu options:
+	// "Rerun" on success (use last collected args, no picker), and "Run" on
+	// failure (re-open picker so the user can change args). Tasks without
+	// args don't need either — Run = Rerun, and Retry already replays.
+	hasArgs?: boolean;
+	// True when the task declares any `dependsOn`. Hides "Run With Deps" when
+	// false — without deps it's a duplicate of "Run".
+	hasDeps?: boolean;
 	onRun?: () => void;
+	onRerun?: () => void;
 	onRunWithDeps?: () => void;
 	onRetry?: () => void;
 	onKill?: () => void;
@@ -33,8 +42,28 @@ const FAILURE_OPTIONS = [
 	"Copy Logs",
 	"Close",
 ] as const;
+// Failure menu when the task has args: extra "Run" lets the user re-pick
+// args (Retry replays the last set silently).
+const FAILURE_WITH_ARGS_OPTIONS = [
+	"Retry",
+	"Run",
+	"Run With Deps",
+	"Copy Logs",
+	"Close",
+] as const;
 const RUNNING_OPTIONS = ["Kill", "Copy Logs", "Close"] as const;
 const DEFAULT_OPTIONS = ["Run", "Run With Deps", "Copy Logs", "Close"] as const;
+// Success menu when the task has args: "Rerun" replays last args (the common
+// case after a green run when iterating on the same input), "Run" re-opens
+// the picker for a fresh selection. Rerun comes first so Enter on the
+// default-highlighted option does the expected thing.
+const SUCCESS_WITH_ARGS_OPTIONS = [
+	"Rerun",
+	"Run",
+	"Run With Deps",
+	"Copy Logs",
+	"Close",
+] as const;
 
 // Sanitize a captured log line for safe rendering inside Ink.
 //
@@ -163,11 +192,14 @@ const LogPane: React.FC<LogPaneProps> = ({
 
 // Each option has a single-key shortcut. The labels also display this key
 // inline (via <Kbd>) so the footer is both legend *and* actionable list —
-// there's no separate hint row.
+// there's no separate hint row. Rerun has no shortcut on purpose: in the
+// success-with-args menu it sits next to "Run" (which already binds `r`),
+// and the menu is reachable via h/l + Enter.
 const OPTION_KEYS: Record<string, string | undefined> = {
 	Run: "r",
 	Retry: "r",
 	"Run With Deps": "R",
+	Rerun: undefined,
 	"Copy Logs": "c",
 	Kill: "K",
 	Close: "x",
@@ -218,10 +250,21 @@ const DetailFooter: React.FC<FooterProps> = ({
 	</Box>
 );
 
-function optionsForStatus(status: TaskState["status"]): readonly string[] {
+function optionsForStatus(
+	status: TaskState["status"],
+	hasArgs: boolean,
+	hasDeps: boolean,
+): readonly string[] {
 	if (status === "RUNNING") return RUNNING_OPTIONS;
-	if (status === "FAILURE") return FAILURE_OPTIONS;
-	return DEFAULT_OPTIONS;
+	let opts: readonly string[];
+	if (status === "FAILURE")
+		opts = hasArgs ? FAILURE_WITH_ARGS_OPTIONS : FAILURE_OPTIONS;
+	else if (status === "SUCCESS" && hasArgs) opts = SUCCESS_WITH_ARGS_OPTIONS;
+	else opts = DEFAULT_OPTIONS;
+	// "Run With Deps" only differs from "Run" when there are upstream tasks
+	// to walk; otherwise it's a confusing duplicate.
+	if (!hasDeps) return opts.filter((o) => o !== "Run With Deps");
+	return opts;
 }
 
 const TaskDetail: React.FC<TaskDetailProps> = ({
@@ -231,7 +274,10 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	cmd,
 	fullscreen = false,
 	inputLocked = false,
+	hasArgs = false,
+	hasDeps = false,
 	onRun,
+	onRerun,
 	onRunWithDeps,
 	onRetry,
 	onKill,
@@ -240,7 +286,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 }) => {
 	const [, rows] = useStdoutDimensions();
 	const isFailed = task.status === "FAILURE";
-	const options = optionsForStatus(task.status);
+	const options = optionsForStatus(task.status, hasArgs, hasDeps);
 	const [selectedOption, setSelectedOption] = useState(0);
 	const [message, setMessage] = useState("");
 
@@ -317,6 +363,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		if (!choice) return;
 		if (choice === "Retry") onRetry?.();
 		else if (choice === "Run") onRun?.();
+		else if (choice === "Rerun") onRerun?.();
 		else if (choice === "Run With Deps") onRunWithDeps?.();
 		else if (choice === "Kill") onKill?.();
 		else if (choice === "Copy Logs") copyLogsToClipboard();
