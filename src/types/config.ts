@@ -3,6 +3,7 @@ import { z } from "zod";
 export const TaskSchema = z.object({
 	id: z.string(),
 	cmd: z.string(),
+	description: z.string().optional(),
 	dependsOn: z.array(z.string()).default([]),
 	tags: z.array(z.string()).default([]),
 	cwd: z.string().optional(),
@@ -16,6 +17,8 @@ export const ConfigSchema = z.object({
 	$schema: z.string().optional(),
 	tasks: z.array(TaskSchema),
 	env: z.object({}).catchall(z.string()).optional().default({}),
+	// Optional dictionary of tag descriptions keyed by tag name.
+	tags: z.object({}).catchall(z.string()).optional().default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -23,4 +26,5 @@ export type Config = z.infer<typeof ConfigSchema>;
 export interface NormalizedConfig {
 	tasks: Record<string, Task>;
 	env: Record<string, string>;
+	tags: Record<string, string>;
 }

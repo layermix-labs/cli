@@ -64,6 +64,7 @@ export class ConfigLoader {
 		return {
 			tasks,
 			env: config.env || {},
+			tags: config.tags || {},
 		};
 	}
 
@@ -71,11 +72,13 @@ export class ConfigLoader {
 		const merged: NormalizedConfig = {
 			tasks: {},
 			env: {},
+			tags: {},
 		};
 
 		for (const config of configs) {
 			merged.env = { ...merged.env, ...config.env };
 			merged.tasks = { ...merged.tasks, ...config.tasks };
+			merged.tags = { ...merged.tags, ...config.tags };
 		}
 
 		return merged;

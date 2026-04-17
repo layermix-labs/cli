@@ -16,6 +16,9 @@
           "cmd": {
             "type": "string"
           },
+          "description": {
+            "type": "string"
+          },
           "dependsOn": {
             "default": [],
             "type": "array",
@@ -57,11 +60,20 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "tags": {
+      "default": {},
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "required": [
     "tasks",
-    "env"
+    "env",
+    "tags"
   ],
   "additionalProperties": false
 }

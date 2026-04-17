@@ -1,38 +1,56 @@
 {
-  "$schema": "./schema.json",
-  "tasks": [
-    {
-      "id": "clean",
-      "cmd": "rm -rf dist",
-      "tags": ["build"],
-      "dependsOn": []
-    },
-    {
-      "id": "compile",
-      "cmd": "tsc",
-      "dependsOn": ["clean"],
-      "tags": ["build"]
-    },
-    {
-      "id": "lint",
-      "cmd": "eslint .",
-      "tags": ["test"],
-      "dependsOn": []
-    },
-    {
-      "id": "test",
-      "cmd": "vitest run",
-      "dependsOn": ["compile", "lint"],
-      "tags": ["test"]
-    },
-    {
-      "id": "bundle",
-      "cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
-      "dependsOn": ["compile"],
-      "tags": ["build"]
-    }
-  ],
-  "env": {
-    "NODE_ENV": "development"
-  }
+	"$schema": "./schema.json",
+	"tasks": [
+		{
+			"id": "clean",
+			"cmd": "rm -rf dist",
+			"tags": ["build"],
+			"dependsOn": []
+		},
+		{
+			"id": "compile",
+			"cmd": "tsc",
+			"dependsOn": ["clean"],
+			"tags": ["build"]
+		},
+		{
+			"id": "lint",
+			"cmd": "biome check",
+			"tags": ["test"],
+			"dependsOn": []
+		},
+		{
+			"id": "typecheck",
+			"cmd": "tsgo --noEmit -p tsconfig.check.json",
+			"tags": ["test"],
+			"dependsOn": []
+		},
+		{
+			"id": "fallow",
+			"cmd": "fallow",
+			"tags": ["test"],
+			"dependsOn": []
+		},
+		{
+			"id": "test",
+			"cmd": "vitest run",
+			"dependsOn": ["compile", "lint", "typecheck"],
+			"tags": ["test"]
+		},
+		{
+			"id": "bundle",
+			"cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
+			"dependsOn": ["compile"],
+			"tags": ["build"]
+		},
+		{
+			"id": "fix",
+			"cmd": "biome check --write",
+			"tags": [],
+			"dependsOn": []
+		}
+	],
+	"env": {
+		"NODE_ENV": "development"
+	}
 }

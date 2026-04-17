@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import type React from "react";
-import type { TaskStatus } from "../../core/task-runner.js";
-import { STATUS_COLOR, STATUS_ICON, STATUS_LABEL } from "./status.js";
+import { useMemo } from "react";
+import Overview from "./Overview.js";
 import type { TaskState } from "./useTaskState.js";
 
 interface TagDetailProps {
@@ -9,6 +9,7 @@ interface TagDetailProps {
 	taskIds: string[];
 	tasks: Record<string, TaskState>;
 	width: number;
+	description?: string;
 }
 
 const TagDetail: React.FC<TagDetailProps> = ({
@@ -16,49 +17,69 @@ const TagDetail: React.FC<TagDetailProps> = ({
 	taskIds,
 	tasks,
 	width,
+	description,
 }) => {
-	return (
-		<Box
-			flexDirection="column"
-			flexGrow={1}
-			width={width}
-			borderStyle="single"
-			borderColor="magenta"
-			paddingX={1}
-		>
-			<Box marginBottom={1}>
+	const filteredTasks = useMemo(() => {
+		const out: Record<string, TaskState> = {};
+		for (const id of taskIds) {
+			if (tasks[id]) out[id] = tasks[id];
+		}
+		return out;
+	}, [taskIds, tasks]);
+
+	const title = (
+		<Box flexDirection="column">
+			<Box>
 				<Text bold>Tag: </Text>
-				<Text color="magenta">#{tag}</Text>
+				<Text color="magenta" bold>
+					#{tag}
+				</Text>
 				<Text dimColor>
 					{" "}
 					({taskIds.length} task{taskIds.length === 1 ? "" : "s"})
 				</Text>
 			</Box>
-
-			<Box flexDirection="column" flexGrow={1}>
-				{taskIds.length === 0 && <Text dimColor>No tasks carry this tag.</Text>}
-				{taskIds.map((id) => {
-					const t = tasks[id];
-					const status: TaskStatus = t?.status ?? "IDLE";
-					return (
-						<Box key={id}>
-							<Text color={STATUS_COLOR[status]}>{STATUS_ICON[status]} </Text>
-							<Text wrap="truncate-end">{id}</Text>
-							<Text dimColor> [{STATUS_LABEL[status]}]</Text>
-						</Box>
-					);
-				})}
-			</Box>
-
-			<Box marginTop={1}>
-				<Text dimColor>Press </Text>
-				<Text bold>Enter</Text>
-				<Text dimColor>
-					{" "}
-					to run these tasks (with their upstream dependencies).
+			{description ? (
+				<Text dimColor wrap="truncate-end">
+					{description}
 				</Text>
-			</Box>
+			) : null}
 		</Box>
+	);
+
+	const footer = (
+		<Text dimColor>
+			Press <Text bold>Enter</Text> to run these tasks (with their upstream
+			dependencies).
+		</Text>
+	);
+
+	if (taskIds.length === 0) {
+		return (
+			<Box
+				flexDirection="column"
+				flexGrow={1}
+				width={width}
+				borderStyle="single"
+				borderColor="magenta"
+				paddingX={1}
+			>
+				{title}
+				<Box marginTop={1}>
+					<Text dimColor>No tasks carry this tag.</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	return (
+		<Overview
+			tasks={filteredTasks}
+			width={width}
+			title={title}
+			borderColor="magenta"
+			footer={footer}
+		/>
 	);
 };
 

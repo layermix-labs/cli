@@ -37,6 +37,9 @@ export class Executor extends EventEmitter {
 	private failed = new Set<string>();
 	private skipped = new Set<string>();
 	private running = new Map<string, Promise<void>>();
+	// Tasks in this set bypass the dependency check once, so `scheduleTask`
+	// can fire a single task on demand regardless of upstream state.
+	private forceRun = new Set<string>();
 
 	private isProcessing = false;
 	private processQueuePromise: Promise<void> | null = null;
@@ -108,6 +111,50 @@ export class Executor extends EventEmitter {
 	}
 
 	/**
+	 * Schedules a single task to run right now, without pulling in its
+	 * upstream dependency closure and without waiting for deps to be marked
+	 * completed. Intended for the TUI's "Run" button — a manual override for
+	 * power users who know the task's inputs are already in place.
+	 * Use `scheduleRun([id])` for the safe "run this task + its deps" flow.
+	 */
+	scheduleTask(taskId: string): void {
+		if (!this.graph.getTask(taskId)) return;
+
+		if (!this.taskRunners.has(taskId)) {
+			const task = this.graph.getTask(taskId)!;
+			const runner = new TaskRunner(task);
+			runner.on("output", (data) => this.emit("taskOutput", taskId, data));
+			this.taskRunners.set(taskId, runner);
+			this.emit("taskAdded", taskId);
+		}
+
+		if (this.running.has(taskId) || this.pending.has(taskId)) {
+			// Already queued; just mark it as force-runnable so it fires on the
+			// next processQueue pass even if its deps haven't completed.
+			this.forceRun.add(taskId);
+			this.processQueue();
+			return;
+		}
+
+		const runner = this.taskRunners.get(taskId)!;
+		if (
+			this.completed.has(taskId) ||
+			this.failed.has(taskId) ||
+			this.skipped.has(taskId)
+		) {
+			runner.reset();
+			this.completed.delete(taskId);
+			this.failed.delete(taskId);
+			this.skipped.delete(taskId);
+			this.emit("taskReset", taskId);
+		}
+
+		this.pending.add(taskId);
+		this.forceRun.add(taskId);
+		this.processQueue();
+	}
+
+	/**
 	 * Retries a specific task and its dependents.
 	 * Resets their state and resumes execution.
 	 */
@@ -167,6 +214,12 @@ export class Executor extends EventEmitter {
 					for (const taskId of currentPending) {
 						const task = this.graph.getTask(taskId)!;
 
+						// Force-run bypasses dep checks entirely — manual override from the TUI.
+						if (this.forceRun.has(taskId)) {
+							ready.push(taskId);
+							continue;
+						}
+
 						// Check dependencies
 						// A dependency is met if it is in 'completed'.
 						// Note: If a dependency was NOT in the initial set to run, we assume it's met?
@@ -198,6 +251,7 @@ export class Executor extends EventEmitter {
 						if (this.running.size >= this.concurrency) break;
 
 						this.pending.delete(taskId);
+						this.forceRun.delete(taskId);
 						const runner = this.taskRunners.get(taskId)!;
 
 						this.emit("taskStart", taskId);

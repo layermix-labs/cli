@@ -1,6 +1,6 @@
 import { Box, Text, useApp, useInput } from "ink";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Executor } from "../../core/executor.js";
 import type { Task } from "../../types/config.js";
 import Overview from "./Overview.js";
@@ -17,6 +17,7 @@ const SIDEBAR_GAP = 1;
 interface AppProps {
 	executor: Executor;
 	allTasks: Task[];
+	tagDescriptions?: Record<string, string>;
 }
 
 type NavItem =
@@ -24,7 +25,11 @@ type NavItem =
 	| { kind: "task"; id: string }
 	| { kind: "tag"; name: string };
 
-const App: React.FC<AppProps> = ({ executor, allTasks }) => {
+const App: React.FC<AppProps> = ({
+	executor,
+	allTasks,
+	tagDescriptions = {},
+}) => {
 	const { exit } = useApp();
 
 	const allTaskIds = useMemo(() => allTasks.map((t) => t.id), [allTasks]);
@@ -49,6 +54,7 @@ const App: React.FC<AppProps> = ({ executor, allTasks }) => {
 	);
 
 	const [selectedIndex, setSelectedIndex] = useState(0);
+	const [fullscreenLogs, setFullscreenLogs] = useState(false);
 
 	const tasksList = useMemo(
 		() =>
@@ -70,11 +76,35 @@ const App: React.FC<AppProps> = ({ executor, allTasks }) => {
 		return map;
 	}, [allTasks]);
 
+	const tasksById = useMemo(() => {
+		const map: Record<string, Task> = {};
+		allTasks.forEach((t) => {
+			map[t.id] = t;
+		});
+		return map;
+	}, [allTasks]);
+
+	// Any non-task selection automatically leaves fullscreen mode.
+	useEffect(() => {
+		if (selected.kind !== "task") setFullscreenLogs(false);
+	}, [selected.kind]);
+
 	useInput((input, key) => {
-		if (key.escape || (input === "c" && key.ctrl)) {
+		if (input === "c" && key.ctrl) {
 			exit();
 			process.exit(0);
 		}
+		if (key.escape) {
+			if (fullscreenLogs) {
+				setFullscreenLogs(false);
+				return;
+			}
+			exit();
+			process.exit(0);
+		}
+
+		// Sidebar nav is disabled while fullscreen so scroll keys don't shift the task selection.
+		if (fullscreenLogs) return;
 
 		if (key.upArrow || input === "k") {
 			setSelectedIndex((prev) => (prev > 0 ? prev - 1 : navItems.length - 1));
@@ -108,72 +138,96 @@ const App: React.FC<AppProps> = ({ executor, allTasks }) => {
 			>
 				<Text bold>My-Runner TUI</Text>
 				<Text> | </Text>
-				<Text>Nav: Arrows/hjkl | Run: Enter | Quit: Ctrl+C</Text>
+				{fullscreenLogs ? (
+					<Text>Logs fullscreen — PgUp/PgDn · g/G · f or Esc to exit</Text>
+				) : (
+					<Text>Nav: Arrows/hjkl | Run: Enter | Quit: Ctrl+C</Text>
+				)}
 			</Box>
 
-			<Box flexDirection="row" flexGrow={1}>
-				{/* Sidebar */}
-				<Box
-					flexDirection="column"
-					marginRight={SIDEBAR_GAP}
-					width={SIDEBAR_WIDTH}
-					flexShrink={0}
-				>
+			{fullscreenLogs && selected.kind === "task" ? (
+				<TaskDetail
+					task={
+						tasksMap[selected.id] ?? {
+							id: selected.id,
+							status: "IDLE",
+							output: [],
+						}
+					}
+					description={tasksById[selected.id]?.description}
+					width={columns}
+					fullscreen
+					onToggleFullscreen={() => setFullscreenLogs(false)}
+				/>
+			) : (
+				<Box flexDirection="row" flexGrow={1}>
+					{/* Sidebar */}
 					<Box
-						borderStyle="single"
-						borderColor="gray"
-						marginBottom={0}
+						flexDirection="column"
+						marginRight={SIDEBAR_GAP}
 						width={SIDEBAR_WIDTH}
+						flexShrink={0}
 					>
-						<Text
-							color={selected.kind === "overview" ? "cyan" : undefined}
-							bold={selected.kind === "overview"}
+						<Box
+							borderStyle="single"
+							borderColor="gray"
+							marginBottom={0}
+							width={SIDEBAR_WIDTH}
 						>
-							{selected.kind === "overview" ? "> " : "  "}Overview
-						</Text>
+							<Text
+								color={selected.kind === "overview" ? "cyan" : undefined}
+								bold={selected.kind === "overview"}
+							>
+								{selected.kind === "overview" ? "> " : "  "}Overview
+							</Text>
+						</Box>
+						<TaskList
+							tasks={tasksList}
+							selectedTaskId={selectedTaskId}
+							width={SIDEBAR_WIDTH}
+						/>
+						<TagList
+							tags={allTags}
+							selectedTag={selectedTag}
+							width={SIDEBAR_WIDTH}
+						/>
 					</Box>
-					<TaskList
-						tasks={tasksList}
-						selectedTaskId={selectedTaskId}
-						width={SIDEBAR_WIDTH}
-					/>
-					<TagList
-						tags={allTags}
-						selectedTag={selectedTag}
-						width={SIDEBAR_WIDTH}
-					/>
-				</Box>
 
-				{/* Content */}
-				<Box width={contentWidth} flexDirection="column" flexShrink={0}>
-					{selected.kind === "overview" && (
-						<Overview tasks={tasksMap} width={contentWidth} />
-					)}
-					{selected.kind === "task" && (
-						<TaskDetail
-							task={
-								tasksMap[selected.id] ?? {
-									id: selected.id,
-									status: "IDLE",
-									output: [],
+					{/* Content */}
+					<Box width={contentWidth} flexDirection="column" flexShrink={0}>
+						{selected.kind === "overview" && (
+							<Overview tasks={tasksMap} width={contentWidth} />
+						)}
+						{selected.kind === "task" && (
+							<TaskDetail
+								task={
+									tasksMap[selected.id] ?? {
+										id: selected.id,
+										status: "IDLE",
+										output: [],
+									}
 								}
-							}
-							width={contentWidth}
-							onRun={() => executor.scheduleRun([selected.id])}
-							onRetry={() => executor.retry(selected.id)}
-							onClose={() => setSelectedIndex(0)}
-						/>
-					)}
-					{selected.kind === "tag" && (
-						<TagDetail
-							tag={selected.name}
-							taskIds={tasksByTag[selected.name] ?? []}
-							tasks={tasksMap}
-							width={contentWidth}
-						/>
-					)}
+								description={tasksById[selected.id]?.description}
+								width={contentWidth}
+								onRun={() => executor.scheduleTask(selected.id)}
+								onRunWithDeps={() => executor.scheduleRun([selected.id])}
+								onRetry={() => executor.retry(selected.id)}
+								onClose={() => setSelectedIndex(0)}
+								onToggleFullscreen={() => setFullscreenLogs(true)}
+							/>
+						)}
+						{selected.kind === "tag" && (
+							<TagDetail
+								tag={selected.name}
+								description={tagDescriptions[selected.name]}
+								taskIds={tasksByTag[selected.name] ?? []}
+								tasks={tasksMap}
+								width={contentWidth}
+							/>
+						)}
+					</Box>
 				</Box>
-			</Box>
+			)}
 		</Box>
 	);
 };

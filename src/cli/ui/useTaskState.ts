@@ -96,6 +96,10 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 		};
 
 		const handleOutput = (taskId: string, data: string) => {
+			// A single chunk often contains many newline-separated lines. Split here so
+			// the UI can slice by row count without each entry silently expanding into
+			// N terminal rows and breaking the fixed-height log pane.
+			const lines = data.split(/\r?\n/);
 			setTasks((prev) => {
 				const currentTask = prev[taskId];
 				if (!currentTask) return prev;
@@ -104,7 +108,7 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 					...prev,
 					[taskId]: {
 						...currentTask,
-						output: [...currentTask.output, data],
+						output: [...currentTask.output, ...lines],
 					},
 				};
 			});

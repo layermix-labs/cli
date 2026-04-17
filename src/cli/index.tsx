@@ -8,6 +8,10 @@ import { render } from "ink";
 import isCI from "is-ci";
 import { ConfigLoader } from "../core/config-loader.js";
 import { Executor } from "../core/executor.js";
+import {
+	type JUnitTaskResult,
+	writeJUnitReport,
+} from "../core/junit-report.js";
 import { TaskGraph } from "../core/task-graph.js";
 import App from "./ui/App.js";
 
@@ -66,12 +70,25 @@ program
 				console.log(
 					`- ${chalk.bold(task.id)}: ${task.cmd} ${task.tags.length ? chalk.gray(`[tags: ${task.tags.join(", ")}]`) : ""}`,
 				);
+				if (task.description) {
+					console.log(`  ${chalk.gray(task.description)}`);
+				}
 				if (task.dependsOn.length > 0) {
 					console.log(
 						`  ${chalk.gray(`Depends on: ${task.dependsOn.join(", ")}`)}`,
 					);
 				}
 			});
+
+			const tagEntries = Object.entries(config.tags);
+			if (tagEntries.length > 0) {
+				console.log(chalk.cyan("\nTags:"));
+				tagEntries
+					.sort(([a], [b]) => a.localeCompare(b))
+					.forEach(([name, description]) => {
+						console.log(`- ${chalk.magenta(`#${name}`)}: ${description}`);
+					});
+			}
 		} catch (error: any) {
 			console.error(chalk.red(`Error: ${error.message}`));
 			process.exit(1);
@@ -160,7 +177,11 @@ program
 	.option("--no-tui", "Disable interactive TUI and use linear output")
 	.option(
 		"--ci",
-		"CI mode: disable TUI and emit a structured JSON report block (auto-detected from common CI env vars)",
+		"CI mode: disable TUI (auto-detected from common CI env vars)",
+	)
+	.option(
+		"--junit <path>",
+		"Write a JUnit XML report to the given path on exit (consumed by GitLab CI artifacts:reports:junit, GitHub Actions test reporters, etc.)",
 	)
 	.action(async (taskIds, options) => {
 		try {
@@ -176,7 +197,6 @@ program
 			});
 
 			const ciMode = !!options.ci || isCI;
-			const failures: { id: string; message: string; output: string }[] = [];
 
 			if (options.dryRunJson) {
 				const plan = executor.getDryRunJson(
@@ -187,23 +207,89 @@ program
 				return;
 			}
 
-			// CI implies --no-tui. Also require a TTY and --no-tui not set.
+			type CollectedResult = {
+				id: string;
+				classname: string;
+				startedAt?: number;
+				endedAt?: number;
+				status: "success" | "failure" | "skipped";
+				message?: string;
+				output: string;
+			};
+			const results = new Map<string, CollectedResult>();
+			const classnameOf = (id: string) => {
+				const task = config.tasks[id];
+				if (!task || task.tags.length === 0) return "task";
+				return task.tags.join(".");
+			};
+			const upsert = (id: string, patch: Partial<CollectedResult>) => {
+				const existing = results.get(id) ?? {
+					id,
+					classname: classnameOf(id),
+					status: "success" as const,
+					output: "",
+				};
+				results.set(id, { ...existing, ...patch });
+			};
+			executor.on("taskStart", (id) => {
+				upsert(id, { startedAt: Date.now(), status: "success", output: "" });
+			});
+			executor.on("taskSuccess", (id, output) => {
+				upsert(id, { endedAt: Date.now(), status: "success", output });
+			});
+			executor.on("taskFail", (id, error, output) => {
+				upsert(id, {
+					endedAt: Date.now(),
+					status: "failure",
+					message: error?.shortMessage || error?.message || String(error),
+					output,
+				});
+			});
+			executor.on("taskSkipped", (id) => {
+				upsert(id, { status: "skipped" });
+			});
+
+			const flushJunit = () => {
+				if (!options.junit) return;
+				const payload: JUnitTaskResult[] = Array.from(results.values()).map(
+					(r) => ({
+						id: r.id,
+						classname: r.classname,
+						durationMs: r.startedAt && r.endedAt ? r.endedAt - r.startedAt : 0,
+						status: r.status,
+						message: r.message,
+						output: r.output,
+					}),
+				);
+				const abs = writeJUnitReport(options.junit, payload);
+				if (!ciMode) {
+					console.log(chalk.gray(`JUnit report written to ${abs}`));
+				}
+			};
+
 			const useTui = process.stdout.isTTY && options.tui !== false && !ciMode;
 
 			if (useTui) {
 				const allTasks = Object.values(config.tasks);
 				enterAltScreen();
-				const app = render(<App executor={executor} allTasks={allTasks} />, {
-					patchConsole: false,
-				});
+				const app = render(
+					<App
+						executor={executor}
+						allTasks={allTasks}
+						tagDescriptions={config.tags}
+					/>,
+					{
+						patchConsole: false,
+					},
+				);
 
 				executor.execute(taskIds.length ? taskIds : undefined, options.tag);
 
 				await app.waitUntilExit();
 				exitAltScreen();
+				flushJunit();
 				process.exit(0);
 			} else {
-				// Setup listeners for linear output
 				executor.on("taskStart", (taskId) => {
 					console.log(chalk.cyan(`[${taskId}] Starting...`));
 				});
@@ -221,26 +307,19 @@ program
 					}
 				});
 
-				executor.on("taskFail", (taskId, error, output) => {
+				executor.on("taskFail", (taskId, _error, output) => {
 					console.log(chalk.red(`[${taskId}] Failed`));
 					if (output.trim()) {
 						console.log(chalk.gray(`--- Output for ${taskId} ---`));
 						console.log(output);
 						console.log(chalk.gray(`-------------------------`));
 					}
-					failures.push({
-						id: taskId,
-						message: error?.shortMessage || error?.message || String(error),
-						output,
-					});
 				});
 
-				const skippedIds: string[] = [];
 				executor.on("taskSkipped", (taskId) => {
 					console.log(
 						chalk.gray(`[${taskId}] Not Started (dependency failed)`),
 					);
-					skippedIds.push(taskId);
 				});
 
 				const success = await executor.execute(
@@ -248,29 +327,8 @@ program
 					options.tag,
 				);
 
-				if (!success) {
-					if (ciMode) {
-						const report = {
-							status: "failure",
-							failures,
-							skipped: skippedIds,
-						};
-						console.log("\n---BEGIN MY-RUNNER-REPORT---");
-						console.log(JSON.stringify(report, null, 2));
-						console.log("---END MY-RUNNER-REPORT---");
-					}
-					process.exit(1);
-				} else if (ciMode) {
-					console.log("\n---BEGIN MY-RUNNER-REPORT---");
-					console.log(
-						JSON.stringify(
-							{ status: "success", failures: [], skipped: skippedIds },
-							null,
-							2,
-						),
-					);
-					console.log("---END MY-RUNNER-REPORT---");
-				}
+				flushJunit();
+				if (!success) process.exit(1);
 			}
 		} catch (error: any) {
 			console.error(chalk.red(`Error: ${error.message}`));

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      ansi-regex:
+        specifier: ^6.2.2
+        version: 6.2.2
       chalk:
         specifier: '4'
         version: 4.1.2
@@ -320,7 +323,6 @@ packages:
 
   '@fallow-cli/darwin-arm64@2.38.0':
     resolution: {integrity: sha512-kYKrU6h9tzuzdWcl3orlPJS3Z8I7tKHdw9R+hx0UjaaxerkvVHbFPAkUf326gL1Vu9fFy91I8n2064j58YkkBw==}
-    cpu: [arm64]
     os: [darwin]
 
   '@fallow-cli/darwin-x64@2.38.0':

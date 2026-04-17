@@ -5,14 +5,24 @@ import type { TaskState } from "./useTaskState.js";
 interface OverviewProps {
 	tasks: Record<string, TaskState>;
 	width: number;
+	title?: React.ReactNode;
+	borderColor?: string;
+	footer?: React.ReactNode;
 }
 
 const LABEL_WIDTH = 20;
 const DURATION_WIDTH = 10;
 const DURATION_GAP = 1;
 const PADDING = 1;
+const BORDER_WIDTH = 2;
 
-const Overview: React.FC<OverviewProps> = ({ tasks, width }) => {
+const Overview: React.FC<OverviewProps> = ({
+	tasks,
+	width,
+	title,
+	borderColor = "gray",
+	footer,
+}) => {
 	const [now, setNow] = React.useState(Date.now());
 
 	React.useEffect(() => {
@@ -54,8 +64,8 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width }) => {
 	}, [taskList]);
 
 	// Waterfall — strictly bounded by the pane we were given.
-	// Inside the pane: padding (both sides) + label + chart + gap + duration must fit.
-	const innerWidth = Math.max(0, width - PADDING * 2);
+	// Inside the pane: border (both sides) + padding (both sides) + label + chart + gap + duration must fit.
+	const innerWidth = Math.max(0, width - PADDING * 2 - BORDER_WIDTH);
 	const chartWidth = Math.max(
 		5,
 		innerWidth - LABEL_WIDTH - DURATION_GAP - DURATION_WIDTH,
@@ -120,10 +130,19 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width }) => {
 	}, [taskList]);
 
 	return (
-		<Box flexDirection="column" paddingX={PADDING} flexGrow={1} width={width}>
-			<Text bold underline>
-				Overview
-			</Text>
+		<Box
+			flexDirection="column"
+			paddingX={PADDING}
+			flexGrow={1}
+			width={width}
+			borderStyle="single"
+			borderColor={borderColor}
+		>
+			{title ?? (
+				<Text bold underline>
+					Overview
+				</Text>
+			)}
 
 			<Box marginTop={1} flexDirection="column">
 				{taskList.map((task) => (
@@ -177,6 +196,8 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width }) => {
 					</Text>
 				)}
 			</Box>
+
+			{footer && <Box marginTop={1}>{footer}</Box>}
 		</Box>
 	);
 };

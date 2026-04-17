@@ -38,6 +38,14 @@ describe("CLI e2e", () => {
 		expect(res.stdout).toContain("c:");
 	});
 
+	it("list prints task and tag descriptions when defined", async () => {
+		const res = await runCli(["list"], simple);
+		expect(res.exitCode).toBe(0);
+		expect(res.stdout).toContain("say hello from a");
+		expect(res.stdout).toContain("#greet");
+		expect(res.stdout).toContain("tasks that print a greeting");
+	});
+
 	it("validate succeeds on valid config", async () => {
 		const res = await runCli(["validate"], simple);
 		expect(res.exitCode).toBe(0);
@@ -80,20 +88,65 @@ describe("CLI e2e", () => {
 		expect(res.stdout).toContain("[downstream] Not Started");
 	});
 
-	it("run with CI=true emits structured JSON report", async () => {
-		const res = await runCli(["run", "--no-tui"], failing, { CI: "true" });
-		expect(res.exitCode).toBe(1);
-		const match = res.stdout.match(
-			/---BEGIN MY-RUNNER-REPORT---\n([\s\S]+?)\n---END MY-RUNNER-REPORT---/,
-		);
-		expect(match).not.toBeNull();
-		const report = JSON.parse(match?.[1]);
-		expect(report.status).toBe("failure");
-		expect(report.failures.map((f: any) => f.id)).toContain("bad");
-		expect(report.skipped).toContain("downstream");
+	it("run --junit writes a JUnit XML report on failure", async () => {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
+		const junitPath = path.join(tmp, "report.xml");
+		try {
+			const res = await runCli(
+				["run", "--no-tui", "--junit", junitPath],
+				failing,
+			);
+			expect(res.exitCode).toBe(1);
+			expect(fs.existsSync(junitPath)).toBe(true);
+			const xml = fs.readFileSync(junitPath, "utf8");
+			expect(xml).toContain('<?xml version="1.0"');
+			expect(xml).toContain('name="bad"');
+			expect(xml).toMatch(/<failure [^>]*type="CommandFailed"/);
+			expect(xml).toContain('name="downstream"');
+			expect(xml).toContain("<skipped");
+			expect(xml).toMatch(/failures="1"/);
+			expect(xml).toMatch(/skipped="1"/);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
 	});
 
-	it("--ci flag alone implies --no-tui and emits the report", async () => {
+	it("run --junit writes a JUnit XML report on success", async () => {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
+		const junitPath = path.join(tmp, "report.xml");
+		try {
+			const res = await runCli(
+				["run", "--no-tui", "--junit", junitPath],
+				simple,
+			);
+			expect(res.exitCode).toBe(0);
+			expect(fs.existsSync(junitPath)).toBe(true);
+			const xml = fs.readFileSync(junitPath, "utf8");
+			expect(xml).toContain('name="a"');
+			expect(xml).toContain('name="b"');
+			expect(xml).toMatch(/failures="0"/);
+			expect(xml).toMatch(/skipped="0"/);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
+	});
+
+	it("run --junit creates parent directories if missing", async () => {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
+		const junitPath = path.join(tmp, "nested", "dir", "report.xml");
+		try {
+			const res = await runCli(
+				["run", "--no-tui", "--junit", junitPath, "a"],
+				simple,
+			);
+			expect(res.exitCode).toBe(0);
+			expect(fs.existsSync(junitPath)).toBe(true);
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
+	});
+
+	it("--ci flag alone implies --no-tui and no longer emits stdout markers", async () => {
 		// Strip CI env vars so only the flag is driving the mode.
 		const res = await execa(
 			"node",
@@ -114,7 +167,7 @@ describe("CLI e2e", () => {
 		);
 		expect(res.exitCode).toBe(1);
 		expect(res.stdout).toContain("[bad] Failed");
-		expect(res.stdout).toMatch(/---BEGIN MY-RUNNER-REPORT---/);
+		expect(res.stdout).not.toMatch(/---BEGIN MY-RUNNER-REPORT---/);
 	});
 
 	it("init writes a task-runner.json with $schema reference", async () => {

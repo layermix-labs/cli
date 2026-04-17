@@ -34,11 +34,12 @@ npm start -- run build                 # explicit form also works
 
 # CI / non-TTY
 npm start -- --no-tui --output-only-failed
-npm start -- --ci                      # forces non-TTY + emits structured JSON report
+npm start -- --ci                      # forces non-TTY (linear output)
 CI=true npm start                      # auto-detected via is-ci; same effect as --ci
+npm start -- --junit report.xml        # write JUnit XML report on exit (works in both TUI and linear modes)
 ```
 
-CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or the explicit `--ci` flag. Either one forces linear output (no TUI even on a TTY) and appends the JSON report block documented in the AI Agents section.
+CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or the explicit `--ci` flag. Either one forces linear output (no TUI even on a TTY). For machine-readable results, pass `--junit <path>` to write a JUnit XML report (see below).
 
 ### Config (`task-runner.json`)
 
@@ -46,15 +47,21 @@ CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common C
 {
   "$schema": "./schema.json",
   "tasks": [
-    { "id": "clean",   "cmd": "rm -rf dist",         "dependsOn": [],                "tags": ["build"] },
+    { "id": "clean",   "cmd": "rm -rf dist",         "dependsOn": [],                "tags": ["build"], "description": "wipe dist/" },
     { "id": "compile", "cmd": "tsc",                 "dependsOn": ["clean"],         "tags": ["build"] },
     { "id": "lint",    "cmd": "eslint .",            "dependsOn": [],                "tags": ["test"] },
     { "id": "test",    "cmd": "vitest run",          "dependsOn": ["compile","lint"],"tags": ["test"] }
   ],
-  "env": { "NODE_ENV": "development" }
+  "env": { "NODE_ENV": "development" },
+  "tags": {
+    "build": "produce a distributable",
+    "test":  "validate the code"
+  }
 }
 ```
 
+- `description` on a task is optional — shown in `list` output and in the TUI task header.
+- Top-level `tags` is an optional `name → description` map — shown in `list` output and in the TUI tag detail header. Tags themselves are still declared per task in each task's `tags` array; this map just annotates them.
 - `cwd` / `env` per task are optional. Task `env` merges on top of global `env`.
 - Configs are discovered via `cosmiconfig` and **merged upward** through parent directories: a nearer config overrides tasks of the same id in an outer config (useful in monorepos).
 - `$schema: "./schema.json"` enables IDE autocompletion. Regenerate with `npx vite-node scripts/generate-schema.ts`.
@@ -122,21 +129,27 @@ No processes are spawned during dry-run.
 
 ### Parse run results
 
-In CI (auto-detected by [`is-ci`](https://www.npmjs.com/package/is-ci), or forced with `--ci`) the TUI is skipped and the process writes a structured report between fenced markers after the normal human output:
+Pass `--junit <path>` to write a [JUnit XML](https://llg.cubic.org/docs/junit/) report on exit. Each task becomes a `<testcase>`; failures carry `<failure>` with the captured stderr inside CDATA; dependency-skipped tasks carry `<skipped>`. Works in both TUI and linear modes; parent directories are created if missing. Exit code is `0` on success, `1` on any failure or skipped-due-to-failed-dep.
 
-```
----BEGIN MY-RUNNER-REPORT---
-{
-  "status": "failure",
-  "failures": [
-    { "id": "bad", "message": "Command failed with exit code 1: exit 1", "output": "..." }
-  ],
-  "skipped": ["downstream"]
-}
----END MY-RUNNER-REPORT---
+```sh
+npm start -- run --junit report.xml -t test
 ```
 
-Extract with a regex on the marker pair. `status` is `"success"` or `"failure"`. Exit code is `0` on success, `1` on any failure or skipped-due-to-failed-dep.
+**GitLab CI** — consumes the file natively via [`artifacts:reports:junit`](https://docs.gitlab.com/ci/yaml/artifacts_reports/#artifactsreportsjunit); results show per-task in the MR widget with failure output inline:
+
+```yaml
+test:
+  script:
+    - npx my-runner run --junit report.xml -t test
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+```
+
+**GitHub Actions** — consume via any of the community JUnit reporters (e.g. [`dorny/test-reporter`](https://github.com/dorny/test-reporter), [`mikepenz/action-junit-report`](https://github.com/mikepenz/action-junit-report)).
+
+The classname attribute is the task's tags joined by `.` (or `task` if untagged), and the name is the task id — so CI UIs that group by classname will bucket tasks under their tag.
 
 ### Config schema
 

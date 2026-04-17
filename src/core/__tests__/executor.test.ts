@@ -54,6 +54,7 @@ describe("Executor", () => {
 		const mockConfig = {
 			tasks: mockTasks,
 			env: {},
+			tags: {},
 		};
 
 		graph = new TaskGraph(mockConfig);
@@ -171,6 +172,21 @@ describe("Executor", () => {
 		const calls = (execa as any).mock.calls.map((c: any[]) => c[0]);
 		expect(calls).toContain("echo A");
 		expect(calls).toContain("echo B");
+		expect(calls).not.toContain("echo C");
+		expect(calls).not.toContain("echo D");
+	});
+
+	it("scheduleTask fires a single task without pulling in its upstream deps", async () => {
+		const executor = new Executor(graph);
+
+		// task-b has dep task-a, but scheduleTask should bypass that.
+		executor.scheduleTask("task-b");
+		// Wait a tick for processQueue to drain.
+		await new Promise((r) => setTimeout(r, 0));
+
+		const calls = (execa as any).mock.calls.map((c: any[]) => c[0]);
+		expect(calls).toContain("echo B");
+		expect(calls).not.toContain("echo A");
 		expect(calls).not.toContain("echo C");
 		expect(calls).not.toContain("echo D");
 	});
