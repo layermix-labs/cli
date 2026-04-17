@@ -1,6 +1,6 @@
 {
 	"name": "@layermix/cli",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"description": "DAG-based task runner CLI with Ink TUI",
 	"type": "module",
 	"bin": {

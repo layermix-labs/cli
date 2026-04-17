@@ -106,7 +106,7 @@ We use [Changesets](https://github.com/changesets/changesets). Workflow:
 1. Make your change on a branch.
 2. `pnpm changeset` — pick the bump (patch / minor / major) and write a one-line summary. This creates a markdown file in `.changeset/`.
 3. Commit the changeset alongside your code.
-4. Open a PR against `main`. CI runs `pnpm start -- -t test`.
+4. Open a PR against `master`. CI runs `pnpm start -- -t test`.
 5. After merge, the **Release** workflow opens (or updates) a "Version Packages" PR that consumes the pending changesets and bumps `package.json` + `CHANGELOG.md`.
 6. Merging that PR triggers `pnpm release`, which runs `prepublishOnly` (schema + build) and publishes to npm.
 
