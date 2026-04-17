@@ -3,22 +3,36 @@ import type { Task } from "../../types/config.js";
 import { Executor } from "../executor.js";
 import { TaskGraph } from "../task-graph.js";
 
+// A Promise<unknown> with the subset of execa-subprocess surface the runner
+// touches (`stdout.on`, `stderr.on`, optional `kill`). Good enough for unit
+// tests; full type from execa is Subprocess<...>.
+type MockSubprocess = Promise<unknown> & {
+	stdout: { on: ReturnType<typeof vi.fn> };
+	stderr: { on: ReturnType<typeof vi.fn> };
+	kill?: ReturnType<typeof vi.fn>;
+};
+
+function mockSubprocess(
+	base: Promise<unknown> = Promise.resolve({
+		stdout: "",
+		stderr: "",
+		exitCode: 0,
+	}),
+): MockSubprocess {
+	const proc = base as MockSubprocess;
+	proc.stdout = { on: vi.fn() };
+	proc.stderr = { on: vi.fn() };
+	return proc;
+}
+
 // Mock execa
-vi.mock("execa", () => {
-	return {
-		execa: vi.fn((_cmd) => {
-			// Return a promise that resolves immediately by default
-			// We can customize this per test if needed
-			const promise = Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
-			// Add fake stream properties
-			(promise as any).stdout = { on: vi.fn() };
-			(promise as any).stderr = { on: vi.fn() };
-			return promise;
-		}),
-	};
-});
+vi.mock("execa", () => ({
+	execa: vi.fn(() => mockSubprocess()),
+}));
 
 import { execa } from "execa";
+
+const execaMock = vi.mocked(execa);
 
 describe("Executor", () => {
 	let mockTasks: Record<string, Task>;
@@ -26,12 +40,7 @@ describe("Executor", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		(execa as any).mockImplementation((_cmd: string) => {
-			const promise = Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
-			(promise as any).stdout = { on: vi.fn() };
-			(promise as any).stderr = { on: vi.fn() };
-			return promise;
-		});
+		execaMock.mockImplementation(() => mockSubprocess() as never);
 
 		mockTasks = {
 			"task-a": { id: "task-a", cmd: "echo A", dependsOn: [], tags: [] },
@@ -97,32 +106,29 @@ describe("Executor", () => {
 		let running = 0;
 		let maxRunning = 0;
 
-		events.forEach((e) => {
+		for (const e of events) {
 			if (e.startsWith("start:")) {
 				running++;
 				maxRunning = Math.max(maxRunning, running);
 			} else {
 				running--;
 			}
-		});
+		}
 
 		expect(maxRunning).toBe(1);
 	});
 
 	it("should skip tasks if dependency fails", async () => {
 		// Mock execa to fail for task-a
-		(execa as any).mockImplementation((cmd: string) => {
+		execaMock.mockImplementation(((cmd: string) => {
 			if (cmd === "echo A") {
-				const p = Promise.reject(new Error("Failed"));
-				(p as any).stdout = { on: vi.fn() };
-				(p as any).stderr = { on: vi.fn() };
+				const p = mockSubprocess(Promise.reject(new Error("Failed")));
+				// Prevent Node's unhandled rejection warning; the runner awaits this.
+				p.catch(() => {});
 				return p;
 			}
-			const p = Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
-			(p as any).stdout = { on: vi.fn() };
-			(p as any).stderr = { on: vi.fn() };
-			return p;
-		});
+			return mockSubprocess();
+		}) as never);
 
 		const executor = new Executor(graph);
 		const skipped: string[] = [];
@@ -169,7 +175,7 @@ describe("Executor", () => {
 
 		expect(execa).toHaveBeenCalledTimes(2); // A and B
 
-		const calls = (execa as any).mock.calls.map((c: any[]) => c[0]);
+		const calls = execaMock.mock.calls.map((c) => c[0]);
 		expect(calls).toContain("echo A");
 		expect(calls).toContain("echo B");
 		expect(calls).not.toContain("echo C");
@@ -184,7 +190,7 @@ describe("Executor", () => {
 		// Wait a tick for processQueue to drain.
 		await new Promise((r) => setTimeout(r, 0));
 
-		const calls = (execa as any).mock.calls.map((c: any[]) => c[0]);
+		const calls = execaMock.mock.calls.map((c) => c[0]);
 		expect(calls).toContain("echo B");
 		expect(calls).not.toContain("echo A");
 		expect(calls).not.toContain("echo C");
@@ -193,28 +199,27 @@ describe("Executor", () => {
 
 	it("killTask stops a running task, surfaces taskFail, and cascade-skips downstream", async () => {
 		// Give task-b a controllable process so we can kill mid-flight.
-		let killFn: ((signal?: string) => void) | null = null;
-		(execa as any).mockImplementation((cmd: string) => {
+		let killFn: ReturnType<typeof vi.fn> | null = null;
+		execaMock.mockImplementation(((cmd: string) => {
 			if (cmd === "echo B") {
-				let reject: (err: Error) => void;
-				const p = new Promise((_resolve, rej) => {
+				let reject: (err: Error) => void = () => {};
+				const pending = new Promise<unknown>((_resolve, rej) => {
 					reject = rej;
-				}) as any;
-				p.stdout = { on: vi.fn() };
-				p.stderr = { on: vi.fn() };
+				});
+				pending.catch(() => {});
+				const p = mockSubprocess(pending);
 				p.kill = vi.fn(() => {
-					const err = new Error("killed");
-					(err as any).isTerminated = true;
+					const err = new Error("killed") as Error & {
+						isTerminated?: boolean;
+					};
+					err.isTerminated = true;
 					reject(err);
 				});
 				killFn = p.kill;
 				return p;
 			}
-			const p = Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
-			(p as any).stdout = { on: vi.fn() };
-			(p as any).stderr = { on: vi.fn() };
-			return p;
-		});
+			return mockSubprocess();
+		}) as never);
 
 		const executor = new Executor(graph);
 		const failed: string[] = [];
@@ -252,14 +257,14 @@ describe("Executor", () => {
 		// First wave: task-b (+ task-a).
 		await executor.execute(["task-b"]);
 		expect(added).toEqual(expect.arrayContaining(["task-a", "task-b"]));
-		const callCountAfterFirst = (execa as any).mock.calls.length;
+		const callCountAfterFirst = execaMock.mock.calls.length;
 
 		// Second wave: task-d (+ task-b, task-c, task-a). a+b already succeeded, only c+d should fire.
 		await executor.execute(["task-d"]);
 
-		const newCalls = (execa as any).mock.calls
+		const newCalls = execaMock.mock.calls
 			.slice(callCountAfterFirst)
-			.map((c: any[]) => c[0]);
+			.map((c) => c[0]);
 		expect(newCalls).toEqual(expect.arrayContaining(["echo C", "echo D"]));
 		expect(newCalls).not.toContain("echo A");
 		expect(newCalls).not.toContain("echo B");

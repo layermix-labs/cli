@@ -42,7 +42,9 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 			}));
 		};
 
-		const handleSuccess = (taskId: string) => {
+		// Shared terminal-state transition for taskSuccess / taskFail — both
+		// just stamp status + endTime + duration from the recorded startTime.
+		const finishTask = (taskId: string, status: "SUCCESS" | "FAILURE") => {
 			setTasks((prev) => {
 				const startTime = prev[taskId]?.startTime || Date.now();
 				const endTime = Date.now();
@@ -50,7 +52,7 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 					...prev,
 					[taskId]: {
 						...prev[taskId],
-						status: "SUCCESS",
+						status,
 						endTime,
 						duration: endTime - startTime,
 					},
@@ -58,21 +60,8 @@ export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
 			});
 		};
 
-		const handleFail = (taskId: string) => {
-			setTasks((prev) => {
-				const startTime = prev[taskId]?.startTime || Date.now();
-				const endTime = Date.now();
-				return {
-					...prev,
-					[taskId]: {
-						...prev[taskId],
-						status: "FAILURE",
-						endTime,
-						duration: endTime - startTime,
-					},
-				};
-			});
-		};
+		const handleSuccess = (taskId: string) => finishTask(taskId, "SUCCESS");
+		const handleFail = (taskId: string) => finishTask(taskId, "FAILURE");
 
 		const handleSkipped = (taskId: string) => {
 			setTasks((prev) => ({

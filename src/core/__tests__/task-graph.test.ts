@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NormalizedConfig } from "../../types/config";
-import { TaskGraph } from "../task-graph";
+import type { NormalizedConfig } from "../../types/config.js";
+import { TaskGraph } from "../task-graph.js";
 
 describe("TaskGraph", () => {
 	it("should correctly sort a simple linear dependency", () => {

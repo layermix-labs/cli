@@ -72,7 +72,7 @@ export class TaskGraph {
 			}
 
 			layers.push(leafNodes);
-			leafNodes.forEach((node) => tempGraph.removeNode(node));
+			for (const node of leafNodes) tempGraph.removeNode(node);
 			nodes = Array.from(tempGraph.nodes);
 		}
 
@@ -109,6 +109,7 @@ export class TaskGraph {
 			// Get direct dependents (nodes where edge is id -> dependent)
 			// Since we added edges as dep -> task, adjacent(id) gives tasks depending on id.
 			const adjacent = this.graph.adjacent(id);
+			if (!adjacent) return;
 			for (const nextId of adjacent) {
 				if (!dependents.has(nextId)) {
 					dependents.add(nextId);

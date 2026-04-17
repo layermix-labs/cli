@@ -1,6 +1,7 @@
 import path from "node:path";
 import { cosmiconfigSync } from "cosmiconfig";
 import {
+	type Config,
 	ConfigSchema,
 	type NormalizedConfig,
 	type Task,
@@ -33,8 +34,9 @@ export class ConfigLoader {
 			try {
 				const validated = ConfigSchema.parse(plainConfig);
 				configs.push(this.normalize(validated));
-			} catch (e: any) {
-				console.error(`Validation error for ${result.filepath}:`, e.message);
+			} catch (e) {
+				const message = e instanceof Error ? e.message : String(e);
+				console.error(`Validation error for ${result.filepath}:`, message);
 				throw e;
 			}
 
@@ -50,21 +52,15 @@ export class ConfigLoader {
 		return this.mergeConfigs(configs.reverse());
 	}
 
-	private normalize(config: any): NormalizedConfig {
+	private normalize(config: Config): NormalizedConfig {
 		const tasks: Record<string, Task> = {};
-		if (Array.isArray(config.tasks)) {
-			config.tasks.forEach((task: Task) => {
-				tasks[task.id] = task;
-			});
-		} else {
-			Object.entries(config.tasks).forEach(([id, task]: [string, any]) => {
-				tasks[id] = { ...task, id };
-			});
+		for (const task of config.tasks) {
+			tasks[task.id] = task;
 		}
 		return {
 			tasks,
-			env: config.env || {},
-			tags: config.tags || {},
+			env: config.env,
+			tags: config.tags,
 		};
 	}
 

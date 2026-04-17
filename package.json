@@ -47,7 +47,6 @@
 		"graph-data-structure": "^4.5.0",
 		"ink": "^6.6.0",
 		"ink-spinner": "^5.0.0",
-		"ink-text-input": "^6.0.0",
 		"is-ci": "^4.1.0",
 		"react": "^19.2.3",
 		"ts-node": "^10.9.2",
@@ -59,15 +58,13 @@
 		"@fallow-cli/darwin-arm64": "^2.38.0",
 		"@types/clipboardy": "^2.0.4",
 		"@types/cosmiconfig": "^6.0.3",
-		"@types/ink-text-input": "^2.0.5",
 		"@types/node": "^25.0.8",
 		"@types/react": "^19.2.8",
 		"@typescript/native-preview": "7.0.0-dev.20260416.2",
 		"fallow": "^2.38.0",
 		"tsx": "^4.21.0",
 		"vite-node": "^5.2.0",
-		"vitest": "^4.0.17",
-		"zod-to-json-schema": "^3.25.1"
+		"vitest": "^4.0.17"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

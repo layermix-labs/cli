@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 
-export type WheelDirection = "up" | "down";
+type WheelDirection = "up" | "down";
 
 // SGR mouse report: ESC [ < Cb ; Cx ; Cy (M|m)
 // Cb 64 = wheel up, 65 = wheel down. Other Cb values (buttons, motion) are ignored here.
-const SGR_MOUSE_RE = /\x1b\[<(\d+);\d+;\d+[Mm]/g;
+// Built via RegExp constructor because the literal form triggers biome's control-char check.
+// biome-ignore lint/complexity/useRegexLiterals: see comment above.
+const SGR_MOUSE_RE = new RegExp("\\u001b\\[<(\\d+);\\d+;\\d+[Mm]", "g");
 const WHEEL_UP = 64;
 const WHEEL_DOWN = 65;
 

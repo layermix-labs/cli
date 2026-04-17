@@ -26,6 +26,21 @@ function runCli(args: string[], cwd: string, env: Record<string, string> = {}) {
 	});
 }
 
+// Creates a temp dir, passes the caller a path under it, and cleans up
+// unconditionally. Used by the JUnit tests that all need a fresh scratch
+// location for their report file.
+async function withJunitTempDir<T>(
+	relative: string,
+	run: (junitPath: string) => Promise<T>,
+): Promise<T> {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
+	try {
+		return await run(path.join(tmp, relative));
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
+}
+
 describe("CLI e2e", () => {
 	const simple = path.join(FIXTURES, "simple");
 	const failing = path.join(FIXTURES, "failing");
@@ -89,9 +104,7 @@ describe("CLI e2e", () => {
 	});
 
 	it("run --junit writes a JUnit XML report on failure", async () => {
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
-		const junitPath = path.join(tmp, "report.xml");
-		try {
+		await withJunitTempDir("report.xml", async (junitPath) => {
 			const res = await runCli(
 				["run", "downstream", "--junit", junitPath],
 				failing,
@@ -106,15 +119,11 @@ describe("CLI e2e", () => {
 			expect(xml).toContain("<skipped");
 			expect(xml).toMatch(/failures="1"/);
 			expect(xml).toMatch(/skipped="1"/);
-		} finally {
-			fs.rmSync(tmp, { recursive: true, force: true });
-		}
+		});
 	});
 
 	it("run --junit writes a JUnit XML report on success", async () => {
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
-		const junitPath = path.join(tmp, "report.xml");
-		try {
+		await withJunitTempDir("report.xml", async (junitPath) => {
 			const res = await runCli(["run", "b", "--junit", junitPath], simple);
 			expect(res.exitCode).toBe(0);
 			expect(fs.existsSync(junitPath)).toBe(true);
@@ -123,21 +132,18 @@ describe("CLI e2e", () => {
 			expect(xml).toContain('name="b"');
 			expect(xml).toMatch(/failures="0"/);
 			expect(xml).toMatch(/skipped="0"/);
-		} finally {
-			fs.rmSync(tmp, { recursive: true, force: true });
-		}
+		});
 	});
 
 	it("run --junit creates parent directories if missing", async () => {
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "my-runner-junit-"));
-		const junitPath = path.join(tmp, "nested", "dir", "report.xml");
-		try {
-			const res = await runCli(["run", "--junit", junitPath, "a"], simple);
-			expect(res.exitCode).toBe(0);
-			expect(fs.existsSync(junitPath)).toBe(true);
-		} finally {
-			fs.rmSync(tmp, { recursive: true, force: true });
-		}
+		await withJunitTempDir(
+			path.join("nested", "dir", "report.xml"),
+			async (junitPath) => {
+				const res = await runCli(["run", "--junit", junitPath, "a"], simple);
+				expect(res.exitCode).toBe(0);
+				expect(fs.existsSync(junitPath)).toBe(true);
+			},
+		);
 	});
 
 	const strippedEnv = () => ({

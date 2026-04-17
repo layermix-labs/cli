@@ -22,6 +22,124 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Prefer execa's `shortMessage` (one-line command summary), fall back to the
+// Error message, and finally to String(error) for non-Error throwables.
+function extractErrorMessage(error: unknown): string {
+	if (error && typeof error === "object") {
+		const withShort = error as { shortMessage?: unknown };
+		if (typeof withShort.shortMessage === "string")
+			return withShort.shortMessage;
+		if (error instanceof Error) return error.message;
+	}
+	return String(error);
+}
+
+// Shared error-exit path for every subcommand. `prefix` customizes the label
+// (e.g. "✕ Validation failed" for `validate`).
+function exitWithError(error: unknown, prefix = "Error"): never {
+	console.error(chalk.red(`${prefix}: ${extractErrorMessage(error)}`));
+	process.exit(1);
+}
+
+// Emit a task's captured stdout/stderr under a separator, or skip the block
+// if there's nothing to print.
+function logTaskOutput(taskId: string, output: string): void {
+	if (!output.trim()) return;
+	console.log(chalk.gray(`--- Output for ${taskId} ---`));
+	console.log(output);
+	console.log(chalk.gray(`-------------------------`));
+}
+
+type CollectedResult = {
+	id: string;
+	classname: string;
+	startedAt?: number;
+	endedAt?: number;
+	status: "success" | "failure" | "skipped";
+	message?: string;
+	output: string;
+};
+
+// Builds a per-task results map wired to the executor's lifecycle events, plus
+// a flush callback that serializes that map to JUnit XML when `--junit` is on.
+function setupJunitCollection(
+	executor: Executor,
+	config: ReturnType<ConfigLoader["load"]>,
+	options: { junit?: string },
+	ciMode: boolean,
+): () => void {
+	const results = new Map<string, CollectedResult>();
+	const classnameOf = (id: string): string => {
+		const task = config.tasks[id];
+		if (!task || task.tags.length === 0) return "task";
+		return task.tags.join(".");
+	};
+	const upsert = (id: string, patch: Partial<CollectedResult>) => {
+		const existing = results.get(id) ?? {
+			id,
+			classname: classnameOf(id),
+			status: "success" as const,
+			output: "",
+		};
+		results.set(id, { ...existing, ...patch });
+	};
+
+	executor.on("taskStart", (id: string) => {
+		upsert(id, { startedAt: Date.now(), status: "success", output: "" });
+	});
+	executor.on("taskSuccess", (id: string, output: string) => {
+		upsert(id, { endedAt: Date.now(), status: "success", output });
+	});
+	executor.on("taskFail", (id: string, error: unknown, output: string) => {
+		upsert(id, {
+			endedAt: Date.now(),
+			status: "failure",
+			message: extractErrorMessage(error),
+			output,
+		});
+	});
+	executor.on("taskSkipped", (id: string) => {
+		upsert(id, { status: "skipped" });
+	});
+
+	return () => {
+		if (!options.junit) return;
+		const payload: JUnitTaskResult[] = Array.from(results.values()).map(
+			(r) => ({
+				id: r.id,
+				classname: r.classname,
+				durationMs: r.startedAt && r.endedAt ? r.endedAt - r.startedAt : 0,
+				status: r.status,
+				message: r.message,
+				output: r.output,
+			}),
+		);
+		const abs = writeJUnitReport(options.junit, payload);
+		if (!ciMode) console.log(chalk.gray(`JUnit report written to ${abs}`));
+	};
+}
+
+// Linear-mode task listeners: log each lifecycle transition to stdout.
+function wireLinearLogging(
+	executor: Executor,
+	options: { outputOnlyFailed?: boolean },
+): void {
+	executor.on("taskStart", (taskId: string) => {
+		console.log(chalk.cyan(`[${taskId}] Starting...`));
+	});
+	executor.on("taskSuccess", (taskId: string, output: string) => {
+		console.log(chalk.green(`[${taskId}] Finished (Success)`));
+		if (!options.outputOnlyFailed) logTaskOutput(taskId, output);
+	});
+	executor.on("taskFail", (taskId: string, _error: unknown, output: string) => {
+		console.log(chalk.red(`[${taskId}] Failed`));
+		logTaskOutput(taskId, output);
+	});
+	executor.on("taskSkipped", (taskId: string) => {
+		console.log(chalk.gray(`[${taskId}] Not Started (dependency failed)`));
+	});
+}
+
 // Detects common coding-agent runtimes so output falls back to the linear,
 // machine-readable mode the same way CI does. Agents we check:
 //   Claude Code (CLAUDECODE, CLAUDE_CODE_ENTRYPOINT)
@@ -117,9 +235,8 @@ program
 						console.log(`- ${chalk.magenta(`#${name}`)}: ${description}`);
 					});
 			}
-		} catch (error: any) {
-			console.error(chalk.red(`Error: ${error.message}`));
-			process.exit(1);
+		} catch (error) {
+			exitWithError(error);
 		}
 	});
 
@@ -143,9 +260,8 @@ program
 			const order = graph.getTopologicalSort();
 			console.log(chalk.cyan("\nLinear Execution Order:"));
 			console.log(order.join(" -> "));
-		} catch (error: any) {
-			console.error(chalk.red(`✕ Validation failed: ${error.message}`));
-			process.exit(1);
+		} catch (error) {
+			exitWithError(error, "✕ Validation failed");
 		}
 	});
 
@@ -189,9 +305,8 @@ program
 			};
 			fs.writeFileSync(target, `${JSON.stringify(starter, null, 2)}\n`);
 			console.log(chalk.green(`✓ Wrote ${target}`));
-		} catch (error: any) {
-			console.error(chalk.red(`Error: ${error.message}`));
-			process.exit(1);
+		} catch (error) {
+			exitWithError(error);
 		}
 	});
 
@@ -238,68 +353,16 @@ program
 				return;
 			}
 
-			type CollectedResult = {
-				id: string;
-				classname: string;
-				startedAt?: number;
-				endedAt?: number;
-				status: "success" | "failure" | "skipped";
-				message?: string;
-				output: string;
-			};
-			const results = new Map<string, CollectedResult>();
-			const classnameOf = (id: string) => {
-				const task = config.tasks[id];
-				if (!task || task.tags.length === 0) return "task";
-				return task.tags.join(".");
-			};
-			const upsert = (id: string, patch: Partial<CollectedResult>) => {
-				const existing = results.get(id) ?? {
-					id,
-					classname: classnameOf(id),
-					status: "success" as const,
-					output: "",
-				};
-				results.set(id, { ...existing, ...patch });
-			};
-			executor.on("taskStart", (id) => {
-				upsert(id, { startedAt: Date.now(), status: "success", output: "" });
-			});
-			executor.on("taskSuccess", (id, output) => {
-				upsert(id, { endedAt: Date.now(), status: "success", output });
-			});
-			executor.on("taskFail", (id, error, output) => {
-				upsert(id, {
-					endedAt: Date.now(),
-					status: "failure",
-					message: error?.shortMessage || error?.message || String(error),
-					output,
-				});
-			});
-			executor.on("taskSkipped", (id) => {
-				upsert(id, { status: "skipped" });
-			});
-
-			const flushJunit = () => {
-				if (!options.junit) return;
-				const payload: JUnitTaskResult[] = Array.from(results.values()).map(
-					(r) => ({
-						id: r.id,
-						classname: r.classname,
-						durationMs: r.startedAt && r.endedAt ? r.endedAt - r.startedAt : 0,
-						status: r.status,
-						message: r.message,
-						output: r.output,
-					}),
-				);
-				const abs = writeJUnitReport(options.junit, payload);
-				if (!ciMode) {
-					console.log(chalk.gray(`JUnit report written to ${abs}`));
-				}
-			};
+			const flushJunit = setupJunitCollection(
+				executor,
+				config,
+				options,
+				ciMode,
+			);
 
 			const useTui = process.stdout.isTTY && !ciMode;
 			const hasExplicitTarget = taskIds.length > 0 || !!options.tag;
+			const targetIds = taskIds.length ? taskIds : undefined;
 
 			if (useTui) {
 				const allTasks = Object.values(config.tasks);
@@ -311,13 +374,11 @@ program
 						allTasks={allTasks}
 						tagDescriptions={config.tags}
 					/>,
-					{
-						patchConsole: false,
-					},
+					{ patchConsole: false },
 				);
 
 				if (hasExplicitTarget) {
-					executor.execute(taskIds.length ? taskIds : undefined, options.tag);
+					executor.execute(targetIds, options.tag);
 				}
 
 				await app.waitUntilExit();
@@ -325,59 +386,24 @@ program
 				exitAltScreen();
 				flushJunit();
 				process.exit(0);
-			} else {
-				executor.on("taskStart", (taskId) => {
-					console.log(chalk.cyan(`[${taskId}] Starting...`));
-				});
-
-				executor.on("taskSuccess", (taskId, output) => {
-					if (!options.outputOnlyFailed) {
-						console.log(chalk.green(`[${taskId}] Finished (Success)`));
-						if (output.trim()) {
-							console.log(chalk.gray(`--- Output for ${taskId} ---`));
-							console.log(output);
-							console.log(chalk.gray(`-------------------------`));
-						}
-					} else {
-						console.log(chalk.green(`[${taskId}] Finished (Success)`));
-					}
-				});
-
-				executor.on("taskFail", (taskId, _error, output) => {
-					console.log(chalk.red(`[${taskId}] Failed`));
-					if (output.trim()) {
-						console.log(chalk.gray(`--- Output for ${taskId} ---`));
-						console.log(output);
-						console.log(chalk.gray(`-------------------------`));
-					}
-				});
-
-				executor.on("taskSkipped", (taskId) => {
-					console.log(
-						chalk.gray(`[${taskId}] Not Started (dependency failed)`),
-					);
-				});
-
-				if (!hasExplicitTarget && !ciMode) {
-					console.log(
-						chalk.yellow(
-							"No tasks specified. Pass task ids or -t <tag>, or run `my-runner list` to see available tasks.",
-						),
-					);
-					return;
-				}
-
-				const success = await executor.execute(
-					taskIds.length ? taskIds : undefined,
-					options.tag,
-				);
-
-				flushJunit();
-				if (!success) process.exit(1);
 			}
-		} catch (error: any) {
-			console.error(chalk.red(`Error: ${error.message}`));
-			process.exit(1);
+
+			wireLinearLogging(executor, options);
+
+			if (!hasExplicitTarget && !ciMode) {
+				console.log(
+					chalk.yellow(
+						"No tasks specified. Pass task ids or -t <tag>, or run `my-runner list` to see available tasks.",
+					),
+				);
+				return;
+			}
+
+			const success = await executor.execute(targetIds, options.tag);
+			flushJunit();
+			if (!success) process.exit(1);
+		} catch (error) {
+			exitWithError(error);
 		}
 	});
 

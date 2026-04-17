@@ -35,9 +35,6 @@ importers:
       ink-spinner:
         specifier: ^5.0.0
         version: 5.0.0(ink@6.6.0(@types/react@19.2.8)(react@19.2.3))(react@19.2.3)
-      ink-text-input:
-        specifier: ^6.0.0
-        version: 6.0.0(ink@6.6.0(@types/react@19.2.8)(react@19.2.3))(react@19.2.3)
       is-ci:
         specifier: ^4.1.0
         version: 4.1.0
@@ -66,9 +63,6 @@ importers:
       '@types/cosmiconfig':
         specifier: ^6.0.3
         version: 6.0.3(typescript@5.9.3)
-      '@types/ink-text-input':
-        specifier: ^2.0.5
-        version: 2.0.5
       '@types/node':
         specifier: ^25.0.8
         version: 25.0.8
@@ -90,9 +84,6 @@ importers:
       vitest:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@25.0.8)(tsx@4.21.0)
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.1(zod@4.3.5)
 
 packages:
 
@@ -529,17 +520,8 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
-  '@types/ink-text-input@2.0.5':
-    resolution: {integrity: sha512-dp6qIrf/VKQyiJfLSOTk7XhbAG3SkGLMrL/5QwaOpYae20+/+VFLuEgpfjpAWOITVL7uyiE9nKdQ4pk03T2F+Q==}
-
-  '@types/ink@0.5.2':
-    resolution: {integrity: sha512-yEuhWTRMXJkIWiaM58c5kuRot5HFccv9kjjgy0fBZG0+tYb+sMBaxHNPVqyZXspGGlmwDOQ1d3BsygWpWlW17w==}
-
   '@types/node@25.0.8':
     resolution: {integrity: sha512-powIePYMmC3ibL0UJ2i2s0WIbq6cg6UyVFQxSCpaPxxzAaziRfimGivjdF943sSGV6RADVbk0Nvlm5P/FB44Zg==}
-
-  '@types/prop-types@15.7.15':
-    resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
 
   '@types/react@19.2.8':
     resolution: {integrity: sha512-3MbSL37jEchWZz2p2mjntRZtPt837ij10ApxKfgmXCTuHWagYg7iA5bqPw6C8BMPfwidlvfPI/fxOc42HLhcyg==}
@@ -840,13 +822,6 @@ packages:
     peerDependencies:
       ink: '>=4.0.0'
       react: '>=18.0.0'
-
-  ink-text-input@6.0.0:
-    resolution: {integrity: sha512-Fw64n7Yha5deb1rHY137zHTAbSTNelUKuB5Kkk2HACXEtwIHBCf9OH2tP/LQ9fRYTl1F0dZgbW0zPnZk6FA9Lw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      ink: '>=5'
-      react: '>=18'
 
   ink@6.6.0:
     resolution: {integrity: sha512-QDt6FgJxgmSxAelcOvOHUvFxbIUjVpCH5bx+Slvc5m7IEcpGt3dYwbz/L+oRnqEGeRvwy1tineKK4ect3nW1vQ==}
@@ -1257,11 +1232,6 @@ packages:
   yoga-layout@3.2.1:
     resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
 
-  zod-to-json-schema@3.25.1:
-    resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
-    peerDependencies:
-      zod: ^3.25 || ^4
-
   zod@4.3.5:
     resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
 
@@ -1534,20 +1504,9 @@ snapshots:
 
   '@types/estree@1.0.8': {}
 
-  '@types/ink-text-input@2.0.5':
-    dependencies:
-      '@types/ink': 0.5.2
-
-  '@types/ink@0.5.2':
-    dependencies:
-      '@types/node': 25.0.8
-      '@types/prop-types': 15.7.15
-
   '@types/node@25.0.8':
     dependencies:
       undici-types: 7.16.0
-
-  '@types/prop-types@15.7.15': {}
 
   '@types/react@19.2.8':
     dependencies:
@@ -1839,13 +1798,6 @@ snapshots:
       cli-spinners: 2.9.2
       ink: 6.6.0(@types/react@19.2.8)(react@19.2.3)
       react: 19.2.3
-
-  ink-text-input@6.0.0(ink@6.6.0(@types/react@19.2.8)(react@19.2.3))(react@19.2.3):
-    dependencies:
-      chalk: 5.6.2
-      ink: 6.6.0(@types/react@19.2.8)(react@19.2.3)
-      react: 19.2.3
-      type-fest: 4.41.0
 
   ink@6.6.0(@types/react@19.2.8)(react@19.2.3):
     dependencies:
@@ -2222,9 +2174,5 @@ snapshots:
   yoctocolors@2.1.2: {}
 
   yoga-layout@3.2.1: {}
-
-  zod-to-json-schema@3.25.1(zod@4.3.5):
-    dependencies:
-      zod: 4.3.5
 
   zod@4.3.5: {}

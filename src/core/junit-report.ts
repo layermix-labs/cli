@@ -10,6 +10,16 @@ export interface JUnitTaskResult {
 	output?: string;
 }
 
+// XML 1.0 disallows most C0 control characters (only TAB, LF, CR are legal).
+// Strip anything else so downstream parsers don't choke on attribute values or CDATA.
+// Constructor form keeps the raw control bytes out of the source; the literal
+// form triggers biome's noControlCharactersInRegex.
+// biome-ignore lint/complexity/useRegexLiterals: see comment above.
+const ILLEGAL_XML_CHARS = new RegExp(
+	"[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]",
+	"g",
+);
+
 function escapeAttr(s: string): string {
 	return s
 		.replace(/&/g, "&amp;")
@@ -17,15 +27,15 @@ function escapeAttr(s: string): string {
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&apos;")
-		.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+		.replace(ILLEGAL_XML_CHARS, "");
 }
 
 function cdata(s: string): string {
-	const safe = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+	const safe = s.replace(ILLEGAL_XML_CHARS, "");
 	return `<![CDATA[${safe.replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
 }
 
-export function buildJUnitXml(
+function buildJUnitXml(
 	results: JUnitTaskResult[],
 	suiteName = "my-runner",
 ): string {

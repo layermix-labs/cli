@@ -1,6 +1,6 @@
 import ansiRegex from "ansi-regex";
 import clipboardy from "clipboardy";
-import { Box, Text, useInput } from "ink";
+import { Box, type Key, Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { STATUS_COLOR, STATUS_LABEL } from "./status.js";
@@ -51,8 +51,13 @@ const DEFAULT_OPTIONS = ["Run", "Run With Deps", "Copy Logs", "Close"] as const;
 // than the pane — spilling past the sidebar and wrecking the whole layout.
 // Expand tabs to spaces so measured width matches rendered width.
 const ANSI = ansiRegex();
-const SGR_ONLY = /^\x1b\[[\d;:?]*m$/;
-const CURSOR_CTRL = /[\r\n\x08\x0b\x0c]/g;
+// RegExp constructors — the literal form holds raw C0 control bytes which
+// biome's noControlCharactersInRegex rejects. Constructor form is the escape
+// hatch, so silence the partner rule that prefers literals.
+// biome-ignore-start lint/complexity/useRegexLiterals: see comment above.
+const SGR_ONLY = new RegExp("^\\u001b\\[[\\d;:?]*m$");
+const CURSOR_CTRL = new RegExp("[\\r\\n\\u0008\\u000b\\u000c]", "g");
+// biome-ignore-end lint/complexity/useRegexLiterals: see comment above.
 const TAB_REPLACEMENT = "  ";
 
 export const sanitizeLine = (s: string) =>
@@ -60,6 +65,135 @@ export const sanitizeLine = (s: string) =>
 		.replace(ANSI, (match) => (SGR_ONLY.test(match) ? match : ""))
 		.replace(CURSOR_CTRL, "")
 		.replace(/\t/g, TAB_REPLACEMENT);
+
+interface HeaderProps {
+	taskId: string;
+	statusLabel: string;
+	statusColor: string;
+	description?: string;
+	scrollHint: string;
+}
+
+const DetailHeader: React.FC<HeaderProps> = ({
+	taskId,
+	statusLabel,
+	statusColor,
+	description,
+	scrollHint,
+}) => (
+	<Box
+		marginBottom={1}
+		borderStyle="single"
+		borderTop={false}
+		borderLeft={false}
+		borderRight={false}
+		borderColor="gray"
+		flexDirection="column"
+	>
+		<Box>
+			<Text bold>Task: {taskId} </Text>
+			<Text color={statusColor}>[{statusLabel}]</Text>
+			{scrollHint ? <Text dimColor>{scrollHint}</Text> : null}
+		</Box>
+		{description ? (
+			<Text dimColor wrap="truncate-end">
+				{description}
+			</Text>
+		) : null}
+	</Box>
+);
+
+interface LogPaneProps {
+	innerWidth: number;
+	availableHeight: number;
+	visibleOutput: string[];
+	scrollTop: number;
+	isEmpty: boolean;
+}
+
+const LogPane: React.FC<LogPaneProps> = ({
+	innerWidth,
+	availableHeight,
+	visibleOutput,
+	scrollTop,
+	isEmpty,
+}) => (
+	<Box
+		flexDirection="column"
+		width={innerWidth}
+		height={availableHeight}
+		flexShrink={0}
+		flexGrow={0}
+		overflow="hidden"
+	>
+		{visibleOutput.map((line, i) => (
+			// biome-ignore lint/suspicious/noArrayIndexKey: visibleOutput is a flat, position-indexed log window; the line at a given row IS its identity and the scrollTop prefix forces remount on scroll.
+			<Text key={`${scrollTop}-${i}`} wrap="truncate-end">
+				{line.length > 0 ? line : " "}
+			</Text>
+		))}
+		{isEmpty && <Text color="gray">No output yet...</Text>}
+	</Box>
+);
+
+interface FooterProps {
+	options: readonly string[];
+	selectedOption: number;
+	isFailed: boolean;
+	message: string;
+	outlineColor: string;
+	innerWidth: number;
+}
+
+const DetailFooter: React.FC<FooterProps> = ({
+	options,
+	selectedOption,
+	isFailed,
+	message,
+	outlineColor,
+	innerWidth,
+}) => (
+	<Box
+		borderStyle="bold"
+		borderColor={outlineColor}
+		marginTop={0}
+		flexDirection="column"
+		flexShrink={0}
+		width={innerWidth}
+	>
+		<Box justifyContent="space-between">
+			<Box>
+				{isFailed && (
+					<Text color="red" bold>
+						Task Failed{" "}
+					</Text>
+				)}
+				<Text dimColor>
+					←/→ Enter · PgUp/PgDn scroll · g/G top/tail · f fullscreen
+				</Text>
+			</Box>
+			{message ? <Text color="green">{message}</Text> : null}
+		</Box>
+		<Box>
+			{options.map((opt, i) => (
+				<Box key={opt} marginRight={2}>
+					<Text
+						color={i === selectedOption ? "black" : "white"}
+						backgroundColor={i === selectedOption ? "white" : undefined}
+					>
+						{` ${opt} `}
+					</Text>
+				</Box>
+			))}
+		</Box>
+	</Box>
+);
+
+function optionsForStatus(status: TaskState["status"]): readonly string[] {
+	if (status === "RUNNING") return RUNNING_OPTIONS;
+	if (status === "FAILURE") return FAILURE_OPTIONS;
+	return DEFAULT_OPTIONS;
+}
 
 const TaskDetail: React.FC<TaskDetailProps> = ({
 	task,
@@ -75,12 +209,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 }) => {
 	const [, rows] = useStdoutDimensions();
 	const isFailed = task.status === "FAILURE";
-	const isRunning = task.status === "RUNNING";
-	const options = isRunning
-		? RUNNING_OPTIONS
-		: isFailed
-			? FAILURE_OPTIONS
-			: DEFAULT_OPTIONS;
+	const options = optionsForStatus(task.status);
 	const [selectedOption, setSelectedOption] = useState(0);
 	const [message, setMessage] = useState("");
 
@@ -113,7 +242,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	}, [maxScroll]);
 
 	// Reset menu selection + jump to tail when the selected task changes.
-	// eslint-disable-next-line react-hooks/exhaustive-deps
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally keyed on task.id — state setters are stable and we must not rerun on every render.
 	useEffect(() => {
 		setSelectedOption(0);
 		setTail(true);
@@ -122,77 +251,108 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	// Also reset when the status category flips (Running ↔ Failed ↔ Default),
 	// because each uses a different options array — a stale index could land
 	// out of bounds or on an unrelated option.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: keyed on options identity; setSelectedOption is stable.
 	useEffect(() => {
 		setSelectedOption(0);
 	}, [options]);
 
-	useInput((input, key) => {
-		// --- Scroll controls (always available inside TaskDetail) ---
+	// Helpers that move `scrollTop` while keeping the tail-mode invariant
+	// ("latched to the bottom when at the end") in sync.
+	const scrollUpBy = (n: number) => {
+		setTail(false);
+		setScrollTop((prev) => Math.max(0, prev - n));
+	};
+	const scrollDownBy = (n: number) => {
+		setScrollTop((prev) => {
+			const next = Math.min(maxScroll, prev + n);
+			if (next >= maxScroll) setTail(true);
+			return next;
+		});
+	};
+
+	const copyLogsToClipboard = () => {
+		try {
+			clipboardy.writeSync(task.output.join("\n"));
+			setMessage("Logs copied!");
+			setTimeout(() => setMessage(""), 2000);
+		} catch {
+			setMessage("Copy failed");
+		}
+	};
+
+	const activateChoice = (choice: (typeof options)[number]) => {
+		if (choice === "Retry") onRetry?.();
+		else if (choice === "Run") onRun?.();
+		else if (choice === "Run With Deps") onRunWithDeps?.();
+		else if (choice === "Kill") onKill?.();
+		else if (choice === "Copy Logs") copyLogsToClipboard();
+		else if (choice === "Close") onClose?.();
+	};
+
+	const tryPageScroll = (input: string, key: Key): boolean => {
 		const half = Math.max(1, Math.floor(availableHeight / 2));
 		const page = Math.max(1, availableHeight - 1);
-
 		if (key.pageUp || (key.ctrl && input === "u")) {
-			setTail(false);
-			setScrollTop((prev) => Math.max(0, prev - half));
-			return;
+			scrollUpBy(half);
+			return true;
 		}
 		if (key.pageDown || (key.ctrl && input === "d")) {
-			setScrollTop((prev) => {
-				const next = Math.min(maxScroll, prev + half);
-				if (next >= maxScroll) setTail(true);
-				return next;
-			});
-			return;
+			scrollDownBy(half);
+			return true;
 		}
 		if (key.ctrl && input === "b") {
-			setTail(false);
-			setScrollTop((prev) => Math.max(0, prev - page));
-			return;
+			scrollUpBy(page);
+			return true;
 		}
 		if (key.ctrl && input === "f") {
-			setScrollTop((prev) => {
-				const next = Math.min(maxScroll, prev + page);
-				if (next >= maxScroll) setTail(true);
-				return next;
-			});
-			return;
+			scrollDownBy(page);
+			return true;
 		}
+		return false;
+	};
+
+	const tryEdgeJump = (input: string): boolean => {
 		if (input === "g") {
 			setTail(false);
 			setScrollTop(0);
-			return;
+			return true;
 		}
 		if (input === "G") {
 			setTail(true);
 			setScrollTop(maxScroll);
-			return;
+			return true;
 		}
+		return false;
+	};
 
-		// --- Line-by-line scroll (fullscreen only; non-fullscreen lets
-		// App.tsx's sidebar nav own the arrow keys) ---
-		if (fullscreen) {
-			if (key.upArrow || input === "k") {
-				setTail(false);
-				setScrollTop((prev) => Math.max(0, prev - 1));
-				return;
-			}
-			if (key.downArrow || input === "j") {
-				setScrollTop((prev) => {
-					const next = Math.min(maxScroll, prev + 1);
-					if (next >= maxScroll) setTail(true);
-					return next;
-				});
-				return;
-			}
+	// Arrow/j/k line-scroll is fullscreen-only — App.tsx owns arrows otherwise.
+	const tryLineScroll = (input: string, key: Key): boolean => {
+		if (!fullscreen) return false;
+		if (key.upArrow || input === "k") {
+			scrollUpBy(1);
+			return true;
 		}
+		if (key.downArrow || input === "j") {
+			scrollDownBy(1);
+			return true;
+		}
+		return false;
+	};
 
-		// --- Fullscreen toggle ---
+	const tryHandleScroll = (input: string, key: Key): boolean =>
+		tryPageScroll(input, key) ||
+		tryEdgeJump(input) ||
+		tryLineScroll(input, key);
+
+	useInput((input, key) => {
+		if (tryHandleScroll(input, key)) return;
+
 		if (input === "f" || (fullscreen && input === "q")) {
 			onToggleFullscreen?.();
 			return;
 		}
 
-		// --- Menu nav (normal mode only; footer isn't rendered in fullscreen) ---
+		// Footer menu only exists in non-fullscreen mode.
 		if (fullscreen) return;
 
 		if (key.leftArrow || input === "h") {
@@ -201,22 +361,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		if (key.rightArrow || input === "l") {
 			setSelectedOption((prev) => (prev < options.length - 1 ? prev + 1 : 0));
 		}
-		if (key.return) {
-			const choice = options[selectedOption];
-			if (choice === "Retry") onRetry?.();
-			else if (choice === "Run") onRun?.();
-			else if (choice === "Run With Deps") onRunWithDeps?.();
-			else if (choice === "Kill") onKill?.();
-			else if (choice === "Copy Logs") {
-				try {
-					clipboardy.writeSync(task.output.join("\n"));
-					setMessage("Logs copied!");
-					setTimeout(() => setMessage(""), 2000);
-				} catch {
-					setMessage("Copy failed");
-				}
-			} else if (choice === "Close") onClose?.();
-		}
+		if (key.return) activateChoice(options[selectedOption]);
 	});
 
 	// Mouse wheel scrolling — 3 lines per tick (standard OS convention).
@@ -262,43 +407,22 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			overflow="hidden"
 		>
 			{!fullscreen && (
-				<Box
-					marginBottom={1}
-					borderStyle="single"
-					borderTop={false}
-					borderLeft={false}
-					borderRight={false}
-					borderColor="gray"
-					flexDirection="column"
-				>
-					<Box>
-						<Text bold>Task: {task.id} </Text>
-						<Text color={statusColor}>[{statusLabel}]</Text>
-						{scrollHint ? <Text dimColor>{scrollHint}</Text> : null}
-					</Box>
-					{description ? (
-						<Text dimColor wrap="truncate-end">
-							{description}
-						</Text>
-					) : null}
-				</Box>
+				<DetailHeader
+					taskId={task.id}
+					statusLabel={statusLabel}
+					statusColor={statusColor}
+					description={description}
+					scrollHint={scrollHint}
+				/>
 			)}
 
-			<Box
-				flexDirection="column"
-				width={innerWidth}
-				height={availableHeight}
-				flexShrink={0}
-				flexGrow={0}
-				overflow="hidden"
-			>
-				{visibleOutput.map((line, i) => (
-					<Text key={`${scrollTop}-${i}`} wrap="truncate-end">
-						{line.length > 0 ? line : " "}
-					</Text>
-				))}
-				{task.output.length === 0 && <Text color="gray">No output yet...</Text>}
-			</Box>
+			<LogPane
+				innerWidth={innerWidth}
+				availableHeight={availableHeight}
+				visibleOutput={visibleOutput}
+				scrollTop={scrollTop}
+				isEmpty={task.output.length === 0}
+			/>
 
 			{fullscreen ? (
 				<Box width={innerWidth} flexShrink={0}>
@@ -308,40 +432,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 					</Text>
 				</Box>
 			) : (
-				<Box
-					borderStyle="bold"
-					borderColor={outlineColor}
-					marginTop={0}
-					flexDirection="column"
-					flexShrink={0}
-					width={innerWidth}
-				>
-					<Box justifyContent="space-between">
-						<Box>
-							{isFailed && (
-								<Text color="red" bold>
-									Task Failed{" "}
-								</Text>
-							)}
-							<Text dimColor>
-								←/→ Enter · PgUp/PgDn scroll · g/G top/tail · f fullscreen
-							</Text>
-						</Box>
-						{message ? <Text color="green">{message}</Text> : null}
-					</Box>
-					<Box>
-						{options.map((opt, i) => (
-							<Box key={opt} marginRight={2}>
-								<Text
-									color={i === selectedOption ? "black" : "white"}
-									backgroundColor={i === selectedOption ? "white" : undefined}
-								>
-									{` ${opt} `}
-								</Text>
-							</Box>
-						))}
-					</Box>
-				</Box>
+				<DetailFooter
+					options={options}
+					selectedOption={selectedOption}
+					isFailed={isFailed}
+					message={message}
+					outlineColor={outlineColor}
+					innerWidth={innerWidth}
+				/>
 			)}
 		</Box>
 	);
