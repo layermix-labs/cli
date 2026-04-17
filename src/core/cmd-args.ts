@@ -41,32 +41,31 @@ export function resolveArgValues(
 	declared: TaskArg[],
 	caller: (string | string[] | undefined)[],
 ): string[] {
-	const out: string[] = [];
-	for (let i = 0; i < declared.length; i++) {
-		const arg = declared[i];
-		const provided = caller[i];
+	return declared.map((arg, i) => resolveOne(arg, caller[i], i));
+}
 
-		if (provided === undefined || provided === "") {
-			if (arg.type === "text" || arg.type === "select") {
-				if (arg.default === undefined) {
-					throw new Error(
-						`Missing value for arg $${i + 1}${arg.label ? ` (${arg.label})` : ""}`,
-					);
-				}
-				out.push(shellQuote(arg.default));
-				continue;
-			}
-			throw new Error(
-				`Missing value for arg $${i + 1}${arg.label ? ` (${arg.label})` : ""}`,
-			);
-		}
+const missingArgError = (arg: TaskArg, index: number): Error =>
+	new Error(
+		`Missing value for arg $${index + 1}${arg.label ? ` (${arg.label})` : ""}`,
+	);
 
-		if (Array.isArray(provided)) {
-			// Multi-select file/folder: shell-quote each path and join with spaces.
-			out.push(provided.map(shellQuote).join(" "));
-		} else {
-			out.push(shellQuote(provided));
+// Single-arg resolution. Split out so resolveArgValues stays a flat map and
+// the per-arg branching (default fallback for text/select, throw for
+// file/folder, multi-value join) lives behind one cyclomatic boundary.
+function resolveOne(
+	arg: TaskArg,
+	provided: string | string[] | undefined,
+	index: number,
+): string {
+	const isMissing = provided === undefined || provided === "";
+	if (isMissing) {
+		if (arg.type === "text" || arg.type === "select") {
+			if (arg.default === undefined) throw missingArgError(arg, index);
+			return shellQuote(arg.default);
 		}
+		throw missingArgError(arg, index);
 	}
-	return out;
+	// Multi-select file/folder: shell-quote each path and join with spaces.
+	if (Array.isArray(provided)) return provided.map(shellQuote).join(" ");
+	return shellQuote(provided);
 }

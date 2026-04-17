@@ -490,98 +490,99 @@ const App: React.FC<AppProps> = ({
 		// TaskDetail / TagDetail — App only handles the global stuff above.
 	});
 
-	const renderContentPane = () => {
-		if (selected.kind === "overview") {
-			return <Overview tasks={tasksMap} width={contentWidth} />;
-		}
-		if (selected.kind === "group") {
-			// Groups are UI-only (no CLI, no run/retry actions) per design — so
-			// the detail pane is a scoped Overview showing just the members.
-			const ids = tasksByGroup[selected.name] ?? [];
-			const scoped: Record<string, TaskState> = {};
-			for (const id of ids) if (tasksMap[id]) scoped[id] = tasksMap[id];
-			const description = groupDescriptions[selected.name];
-			return (
-				<Overview
-					tasks={scoped}
-					width={contentWidth}
-					title={
-						<Box flexDirection="column">
-							<Box>
-								<Text bold>Group: </Text>
-								<Text color="blue" bold>
-									{selected.name}
-								</Text>
-								<Text dimColor>
-									{" "}
-									({ids.length} task{ids.length === 1 ? "" : "s"})
-								</Text>
-							</Box>
-							{description ? (
-								<Text dimColor wrap="truncate-end">
-									{description}
-								</Text>
-							) : null}
-						</Box>
-					}
-				/>
-			);
-		}
-		if (selected.kind === "task") {
-			const task = tasksById[selected.id];
-			const hasArgs = !!task?.args && task.args.length > 0;
-			const hasDeps = !!task?.dependsOn && task.dependsOn.length > 0;
-			const launch = (mode: PickerMode) => {
-				if (hasArgs) {
-					setPickerState({ taskId: selected.id, mode });
-					return;
-				}
-				if (mode === "run") executor.scheduleTask(selected.id);
-				else executor.scheduleRun([selected.id], undefined, { force: true });
-			};
-			// "Rerun" replays the same args without prompting. Args were stored on
-			// the executor by the picker (or the CLI --arg flag); scheduleTask
-			// re-uses them directly. Visible only when hasArgs, so we never
-			// dispatch this for a no-args task.
-			const rerun = () => executor.scheduleTask(selected.id);
-			return (
-				<TaskDetail
-					task={tasksMap[selected.id] ?? idleTask(selected.id)}
-					description={task?.description}
-					cmd={task?.cmd}
-					width={contentWidth}
-					inputLocked={searchMode || pickerState !== null}
-					hasArgs={hasArgs}
-					hasDeps={hasDeps}
-					onRun={() => launch("run")}
-					onRerun={rerun}
-					onRunWithDeps={() => launch("runWithDeps")}
-					onRetry={() => executor.retry(selected.id)}
-					onKill={() => executor.killTask(selected.id)}
-					onClose={() => setSelectedIndex(0)}
-					onToggleFullscreen={() => setFullscreenLogs(true)}
-				/>
-			);
-		}
+	// Per-kind render helpers. Splitting these out keeps `renderContentPane`
+	// itself a flat 4-way dispatch — fallow flagged the inline version as
+	// over-complex (every nested if/else and per-branch JSX block counted).
+	const renderGroupPane = (name: string) => {
+		// Groups are UI-only (no CLI, no run/retry actions) per design — so
+		// the detail pane is a scoped Overview showing just the members.
+		const ids = tasksByGroup[name] ?? [];
+		const scoped: Record<string, TaskState> = {};
+		for (const id of ids) if (tasksMap[id]) scoped[id] = tasksMap[id];
+		const description = groupDescriptions[name];
 		return (
-			<TagDetail
-				tag={selected.name}
-				description={tagDescriptions[selected.name]}
-				taskIds={tasksByTag[selected.name] ?? []}
-				tasks={tasksMap}
+			<Overview
+				tasks={scoped}
 				width={contentWidth}
-				inputLocked={searchMode}
-				onRun={() =>
-					executor.scheduleRun(undefined, (selected as { name: string }).name, {
-						force: true,
-					})
+				title={
+					<Box flexDirection="column">
+						<Box>
+							<Text bold>Group: </Text>
+							<Text color="blue" bold>
+								{name}
+							</Text>
+							<Text dimColor>
+								{" "}
+								({ids.length} task{ids.length === 1 ? "" : "s"})
+							</Text>
+						</Box>
+						{description ? (
+							<Text dimColor wrap="truncate-end">
+								{description}
+							</Text>
+						) : null}
+					</Box>
 				}
-				onRetryFailed={() =>
-					executor.retryFailed(tasksByTag[(selected as { name: string }).name])
-				}
-				onClose={() => setSelectedIndex(0)}
 			/>
 		);
+	};
+
+	const renderTaskPane = (id: string) => {
+		const task = tasksById[id];
+		const hasArgs = !!task?.args && task.args.length > 0;
+		const hasDeps = !!task?.dependsOn && task.dependsOn.length > 0;
+		const launch = (mode: PickerMode) => {
+			if (hasArgs) {
+				setPickerState({ taskId: id, mode });
+				return;
+			}
+			if (mode === "run") executor.scheduleTask(id);
+			else executor.scheduleRun([id], undefined, { force: true });
+		};
+		// "Rerun" replays the same args without prompting. Args were stored on
+		// the executor by the picker (or the CLI --arg flag); scheduleTask
+		// re-uses them directly. Visible only when hasArgs, so we never
+		// dispatch this for a no-args task.
+		return (
+			<TaskDetail
+				task={tasksMap[id] ?? idleTask(id)}
+				description={task?.description}
+				cmd={task?.cmd}
+				width={contentWidth}
+				inputLocked={searchMode || pickerState !== null}
+				hasArgs={hasArgs}
+				hasDeps={hasDeps}
+				onRun={() => launch("run")}
+				onRerun={() => executor.scheduleTask(id)}
+				onRunWithDeps={() => launch("runWithDeps")}
+				onRetry={() => executor.retry(id)}
+				onKill={() => executor.killTask(id)}
+				onClose={() => setSelectedIndex(0)}
+				onToggleFullscreen={() => setFullscreenLogs(true)}
+			/>
+		);
+	};
+
+	const renderTagPane = (name: string) => (
+		<TagDetail
+			tag={name}
+			description={tagDescriptions[name]}
+			taskIds={tasksByTag[name] ?? []}
+			tasks={tasksMap}
+			width={contentWidth}
+			inputLocked={searchMode}
+			onRun={() => executor.scheduleRun(undefined, name, { force: true })}
+			onRetryFailed={() => executor.retryFailed(tasksByTag[name])}
+			onClose={() => setSelectedIndex(0)}
+		/>
+	);
+
+	const renderContentPane = () => {
+		if (selected.kind === "overview")
+			return <Overview tasks={tasksMap} width={contentWidth} />;
+		if (selected.kind === "group") return renderGroupPane(selected.name);
+		if (selected.kind === "task") return renderTaskPane(selected.id);
+		return renderTagPane(selected.name);
 	};
 
 	const isFullscreenTask = fullscreenLogs && selected.kind === "task";

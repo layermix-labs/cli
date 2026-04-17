@@ -183,42 +183,44 @@ const PathPicker: React.FC<PathPickerProps> = ({
 		? paths.slice(visibleStart, visibleStart + MAX_VISIBLE)
 		: [];
 
+	const moveCursor = (delta: 1 | -1) => {
+		if (!paths) return;
+		setCursor((c) => {
+			const next = c + delta;
+			if (next < 0) return paths.length - 1;
+			if (next >= paths.length) return 0;
+			return next;
+		});
+	};
+
+	const togglePath = (path: string) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(path)) next.delete(path);
+			else next.add(path);
+			return next;
+		});
+
+	const submitCurrent = () => {
+		if (!paths) return;
+		if (!multiple) return onSubmit(paths[cursor]);
+		// If the user never toggled anything, treat the highlighted row as
+		// the single picked entry — common case for a glob that happens to
+		// match exactly the file they wanted.
+		const picks = selected.size > 0 ? Array.from(selected) : [paths[cursor]];
+		onSubmit(picks);
+	};
+
 	useInput((input, key) => {
 		if (key.escape) return onCancel();
 		if (!paths || paths.length === 0) {
 			if (key.return) onCancel();
 			return;
 		}
-		if (key.upArrow || input === "k") {
-			setCursor((c) => (c > 0 ? c - 1 : paths.length - 1));
-			return;
-		}
-		if (key.downArrow || input === "j") {
-			setCursor((c) => (c < paths.length - 1 ? c + 1 : 0));
-			return;
-		}
-		if (multiple && input === " ") {
-			const path = paths[cursor];
-			setSelected((prev) => {
-				const next = new Set(prev);
-				if (next.has(path)) next.delete(path);
-				else next.add(path);
-				return next;
-			});
-			return;
-		}
-		if (key.return) {
-			if (multiple) {
-				// If the user never toggled anything, treat the highlighted row as
-				// the single picked entry — common case for a glob that happens to
-				// match exactly the file they wanted.
-				const picks =
-					selected.size > 0 ? Array.from(selected) : [paths[cursor]];
-				onSubmit(picks);
-			} else {
-				onSubmit(paths[cursor]);
-			}
-		}
+		if (key.upArrow || input === "k") return moveCursor(-1);
+		if (key.downArrow || input === "j") return moveCursor(1);
+		if (multiple && input === " ") return togglePath(paths[cursor]);
+		if (key.return) submitCurrent();
 	});
 
 	const hint = multiple ? (

@@ -119,6 +119,90 @@ function setupJunitCollection(
 	};
 }
 
+// Apply --arg values to the single target task. Throws (via exitWithError)
+// when the user passes --arg with a tag or multiple ids — there's no
+// unambiguous mapping from positional values to a target in that case.
+// Comma-separated values fan out into a string[] for multi-select args.
+function applyCliArgs(
+	executor: Executor,
+	cliArgs: string[],
+	targetIds: string[] | undefined,
+	tag: string | undefined,
+): void {
+	if (cliArgs.length === 0) return;
+	if (!targetIds || targetIds.length !== 1) {
+		exitWithError(
+			new Error(
+				`--arg can only be used with a single task target (got ${
+					targetIds?.length ?? 0
+				} ids${tag ? ` plus tag ${tag}` : ""})`,
+			),
+		);
+	}
+	const values: (string | string[])[] = cliArgs.map((v) =>
+		v.includes(",") ? v.split(",").map((p) => p.trim()) : v,
+	);
+	executor.setTaskArgs(targetIds[0], values);
+}
+
+// TUI render path. Encapsulates the alt-screen lifecycle + Ink render so the
+// main `run` action stays a flat dispatch between TUI and linear modes.
+async function runTui(
+	executor: Executor,
+	config: ReturnType<ConfigLoader["load"]>,
+	initialRun:
+		| {
+				taskIds?: string[];
+				tag?: string;
+				cliArgsProvided: boolean;
+		  }
+		| undefined,
+	flushJunit: () => void,
+): Promise<void> {
+	enterAltScreen();
+	enableMouseReporting();
+	const app = render(
+		<App
+			executor={executor}
+			allTasks={Object.values(config.tasks)}
+			tagDescriptions={config.tags}
+			groupDescriptions={config.groups}
+			rootDir={process.cwd()}
+			initialRun={initialRun}
+		/>,
+		{ patchConsole: false },
+	);
+	await app.waitUntilExit();
+	disableMouseReporting();
+	exitAltScreen();
+	flushJunit();
+	process.exit(0);
+}
+
+// Linear (non-TUI) path: wire console logging, honor the no-target hint when
+// not in CI mode, otherwise execute and bubble exit code.
+async function runLinear(
+	executor: Executor,
+	options: { outputOnlyFailed?: boolean; tag?: string },
+	hasExplicitTarget: boolean,
+	ciMode: boolean,
+	targetIds: string[] | undefined,
+	flushJunit: () => void,
+): Promise<void> {
+	wireLinearLogging(executor, options);
+	if (!hasExplicitTarget && !ciMode) {
+		console.log(
+			chalk.yellow(
+				"No tasks specified. Pass task ids or -t <tag>, or run `layermix list` to see available tasks.",
+			),
+		);
+		return;
+	}
+	const success = await executor.execute(targetIds, options.tag);
+	flushJunit();
+	if (!success) process.exit(1);
+}
+
 // Linear-mode task listeners: log each lifecycle transition to stdout.
 function wireLinearLogging(
 	executor: Executor,
@@ -353,8 +437,6 @@ program
 				rootDir: process.cwd(),
 			});
 
-			const ciMode = !!options.ci || !!options.ai || isCI || isAiAgent();
-
 			if (options.dryRunJson) {
 				const plan = executor.getDryRunJson(
 					taskIds.length ? taskIds : undefined,
@@ -364,89 +446,46 @@ program
 				return;
 			}
 
+			const ciMode = !!options.ci || !!options.ai || isCI || isAiAgent();
 			const flushJunit = setupJunitCollection(
 				executor,
 				config,
 				options,
 				ciMode,
 			);
-
-			const useTui = process.stdout.isTTY && !ciMode;
 			const hasExplicitTarget = taskIds.length > 0 || !!options.tag;
 			const targetIds = taskIds.length ? taskIds : undefined;
-
-			// CLI --arg flags only apply when there's exactly one target task.
-			// Otherwise we'd silently misroute values (which task does $1 belong
-			// to?). For tag runs / multi-task runs / CI auto-run, args must come
-			// from the task's `default` fields.
 			const cliArgs: string[] = options.arg ?? [];
-			if (cliArgs.length > 0) {
-				if (!targetIds || targetIds.length !== 1) {
-					exitWithError(
-						new Error(
-							"--arg can only be used with a single task target (got " +
-								`${targetIds?.length ?? 0} ids${options.tag ? ` plus tag ${options.tag}` : ""})`,
-						),
-					);
-				}
-				// Each --arg entry maps to one positional. A comma in the value
-				// flips that entry into a multi-value list (file/folder args
-				// expecting `multiple: true`). Single values stay as plain strings
-				// so file args without `multiple` still work.
-				const values: (string | string[])[] = cliArgs.map((v) =>
-					v.includes(",") ? v.split(",").map((p) => p.trim()) : v,
-				);
-				executor.setTaskArgs(targetIds[0], values);
-			}
 
+			applyCliArgs(executor, cliArgs, targetIds, options.tag);
+
+			const useTui = process.stdout.isTTY && !ciMode;
 			if (useTui) {
-				const allTasks = Object.values(config.tasks);
-				enterAltScreen();
-				enableMouseReporting();
-				const app = render(
-					<App
-						executor={executor}
-						allTasks={allTasks}
-						tagDescriptions={config.tags}
-						groupDescriptions={config.groups}
-						rootDir={process.cwd()}
-						initialRun={
-							hasExplicitTarget
-								? {
-										taskIds: targetIds,
-										tag: options.tag,
-										// Skip the picker for the initial CLI invocation when
-										// values were already supplied via --arg; otherwise the
-										// CLI flag would be a noop.
-										cliArgsProvided: cliArgs.length > 0,
-									}
-								: undefined
-						}
-					/>,
-					{ patchConsole: false },
-				);
-
-				await app.waitUntilExit();
-				disableMouseReporting();
-				exitAltScreen();
-				flushJunit();
-				process.exit(0);
-			}
-
-			wireLinearLogging(executor, options);
-
-			if (!hasExplicitTarget && !ciMode) {
-				console.log(
-					chalk.yellow(
-						"No tasks specified. Pass task ids or -t <tag>, or run `layermix list` to see available tasks.",
-					),
+				await runTui(
+					executor,
+					config,
+					hasExplicitTarget
+						? {
+								taskIds: targetIds,
+								tag: options.tag,
+								// Skip the picker for the initial CLI invocation when values
+								// were already supplied via --arg; otherwise the flag is a noop.
+								cliArgsProvided: cliArgs.length > 0,
+							}
+						: undefined,
+					flushJunit,
 				);
 				return;
 			}
 
-			const success = await executor.execute(targetIds, options.tag);
-			flushJunit();
-			if (!success) process.exit(1);
+			await runLinear(
+				executor,
+				options,
+				hasExplicitTarget,
+				ciMode,
+				targetIds,
+				flushJunit,
+			);
 		} catch (error) {
 			exitWithError(error);
 		}

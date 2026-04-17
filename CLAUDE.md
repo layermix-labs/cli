@@ -57,6 +57,10 @@ Layers, outside-in:
 
 7. **E2E tests** (`test/e2e.test.ts`, fixtures in `test/fixtures/*/task-runner.json`) spawn the CLI via `node <local-vite-node>/dist/cli.mjs --root <repo> src/cli/index.tsx ...`. The `--root` flag is **required** — without it Vite uses the fixture directory as its root and fails to resolve `react/jsx-dev-runtime`. Don't switch to `npx vite-node` — it installs a fresh rolldown binary that's broken on macOS arm64.
 
+## Verification Step
+
+When you finish making the changes run `pnpm start -t test` to run all the checks we have in this project
+
 ## Gotchas
 
 - ESM only. Relative imports in `src/**` **must** include `.js` extension (`NodeNext` resolution) even though the source is `.ts`/`.tsx` — this is already the pattern throughout, keep it when adding files.
