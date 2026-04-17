@@ -16,12 +16,7 @@ const TaskList: React.FC<TaskListProps> = ({
 	width = 30,
 }) => {
 	return (
-		<Box
-			flexDirection="column"
-			width={width}
-			borderStyle="single"
-			borderColor="gray"
-		>
+		<Box flexDirection="column" width={width} paddingX={1}>
 			<Box marginBottom={1}>
 				<Text bold>Tasks</Text>
 			</Box>

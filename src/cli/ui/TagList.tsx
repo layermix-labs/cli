@@ -9,12 +9,7 @@ interface TagListProps {
 
 const TagList: React.FC<TagListProps> = ({ tags, selectedTag, width = 30 }) => {
 	return (
-		<Box
-			flexDirection="column"
-			width={width}
-			borderStyle="single"
-			borderColor="gray"
-		>
+		<Box flexDirection="column" width={width} paddingX={1}>
 			<Box marginBottom={1}>
 				<Text bold>Tags</Text>
 			</Box>

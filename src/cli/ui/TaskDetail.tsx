@@ -157,6 +157,18 @@ const LogPane: React.FC<LogPaneProps> = ({
 	</Box>
 );
 
+// Each option has a single-key shortcut. The labels also display this key
+// inline (via <Kbd>) so the footer is both legend *and* actionable list —
+// there's no separate hint row.
+const OPTION_KEYS: Record<string, string | undefined> = {
+	Run: "r",
+	Retry: "r",
+	"Run With Deps": "R",
+	"Copy Logs": "c",
+	Kill: "K",
+	Close: "x",
+};
+
 interface FooterProps {
 	options: readonly string[];
 	selectedOption: number;
@@ -175,50 +187,41 @@ const DetailFooter: React.FC<FooterProps> = ({
 	innerWidth,
 }) => (
 	<Box
-		borderStyle="bold"
+		borderStyle="single"
 		borderColor={outlineColor}
+		borderLeft={false}
+		borderRight={false}
+		borderBottom={false}
 		marginTop={0}
-		flexDirection="column"
+		flexDirection="row"
+		justifyContent="space-between"
 		flexShrink={0}
 		width={innerWidth}
 	>
-		<Box justifyContent="space-between">
-			<Box>
-				{isFailed && (
-					<Text color="red" bold>
-						Task Failed{" "}
-					</Text>
-				)}
-				<Text>
-					<Kbd k="←→" />
-					<Text dimColor> menu · </Text>
-					<Kbd k="Enter" />
-					<Kbd k="r" />
-					<Text dimColor> run · </Text>
-					<Kbd k="R" />
-					<Text dimColor> +deps · </Text>
-					<Kbd k="c" />
-					<Text dimColor> copy · </Text>
-					<Kbd k="PgUp/Dn" />
-					<Text dimColor> scroll · </Text>
-					<Kbd k="f" />
-					<Text dimColor> fullscreen</Text>
-				</Text>
-			</Box>
-			{message ? <Text color="green">{message}</Text> : null}
-		</Box>
 		<Box>
-			{options.map((opt, i) => (
-				<Box key={opt} marginRight={2}>
-					<Text
-						color={i === selectedOption ? "black" : "white"}
-						backgroundColor={i === selectedOption ? "white" : undefined}
-					>
-						{` ${opt} `}
-					</Text>
-				</Box>
-			))}
+			{isFailed && (
+				<Text color="red" bold>
+					Task Failed{"  "}
+				</Text>
+			)}
+			{options.map((opt, i) => {
+				const key = OPTION_KEYS[opt];
+				const isSelected = i === selectedOption;
+				return (
+					<Box key={opt} marginRight={i === options.length - 1 ? 0 : 3}>
+						{key ? <Kbd k={key} /> : null}
+						<Text
+							color={isSelected ? "black" : undefined}
+							backgroundColor={isSelected ? "cyan" : undefined}
+							bold={isSelected}
+						>
+							{key ? ` ${opt} ` : ` ${opt} `}
+						</Text>
+					</Box>
+				);
+			})}
 		</Box>
+		{message ? <Text color="green">{message}</Text> : null}
 	</Box>
 );
 
@@ -252,16 +255,17 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	const [scrollTop, setScrollTop] = useState(0);
 	const [tail, setTail] = useState(true);
 
-	// Chrome budget differs between normal and fullscreen modes.
-	// Normal     = top bar (3) + outer border (2) + header block (3) + footer menu (4) = 12
+	// Chrome budget differs between normal and fullscreen modes. The app has
+	// no outer frame, so only the top bar + its divider eat rows up top.
+	// Normal     = top bar (1) + top-bar divider (1) + header block (3)
+	//              + footer divider (1) + footer options (1) = 7
 	//   +1 row each for command line and description when present.
-	// Fullscreen = top bar (3) + hint line (1)                                          = 4
-	//   (fullscreen drops the outer border + padding so output goes edge-to-edge)
+	// Fullscreen = top bar (1) + top-bar divider (1) + hint line (1) = 3
 	const descriptionRow = !fullscreen && description ? 1 : 0;
 	const cmdRow = !fullscreen && cmd ? 1 : 0;
 	const availableHeight = fullscreen
-		? Math.max(5, rows - 4)
-		: Math.max(5, rows - 12 - descriptionRow - cmdRow);
+		? Math.max(5, rows - 3)
+		: Math.max(5, rows - 7 - descriptionRow - cmdRow);
 
 	const totalLines = task.output.length;
 	const maxScroll = Math.max(0, totalLines - availableHeight);
@@ -276,11 +280,11 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		setScrollTop((prev) => Math.min(prev, maxScroll));
 	}, [maxScroll]);
 
-	// Reset menu selection + jump to tail when the selected task changes.
+	// Jump back to tail + reset menu cursor when the selected task changes.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally keyed on task.id — state setters are stable and we must not rerun on every render.
 	useEffect(() => {
-		setSelectedOption(0);
 		setTail(true);
+		setSelectedOption(0);
 	}, [task.id]);
 
 	// Also reset when the status category flips (Running ↔ Failed ↔ Default),
@@ -315,7 +319,8 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		}
 	};
 
-	const activateChoice = (choice: (typeof options)[number]) => {
+	const activateChoice = (choice: (typeof options)[number] | undefined) => {
+		if (!choice) return;
 		if (choice === "Retry") onRetry?.();
 		else if (choice === "Run") onRun?.();
 		else if (choice === "Run With Deps") onRunWithDeps?.();
@@ -387,14 +392,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			return;
 		}
 
-		// Footer menu only exists in non-fullscreen mode.
+		// Footer nav + activation are non-fullscreen only.
 		if (fullscreen) return;
 
-		// Single-key shortcuts for the common task actions. These mirror the
-		// footer menu items but don't require arrow+Enter. `R` is shift+r so it
-		// arrives as a distinct character from lowercase `r`.
+		// Direct single-key shortcuts — skip the menu entirely.
+		// `R` / `K` are Shift+r / Shift+k so they arrive as distinct characters.
 		if (input === "r") {
-			onRun?.();
+			if (isFailed) onRetry?.();
+			else onRun?.();
 			return;
 		}
 		if (input === "R") {
@@ -405,14 +410,27 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			copyLogsToClipboard();
 			return;
 		}
+		if (input === "K") {
+			onKill?.();
+			return;
+		}
+		if (input === "x") {
+			onClose?.();
+			return;
+		}
 
+		// Arrow / h-l navigation between footer options; Enter activates.
 		if (key.leftArrow || input === "h") {
 			setSelectedOption((prev) => (prev > 0 ? prev - 1 : options.length - 1));
+			return;
 		}
 		if (key.rightArrow || input === "l") {
 			setSelectedOption((prev) => (prev < options.length - 1 ? prev + 1 : 0));
+			return;
 		}
-		if (key.return) activateChoice(options[selectedOption]);
+		if (key.return) {
+			activateChoice(options[selectedOption]);
+		}
 	});
 
 	// Mouse wheel scrolling — 3 lines per tick (standard OS convention).
@@ -437,7 +455,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		[task.output, scrollTop, availableHeight],
 	);
 
-	const innerWidth = fullscreen ? width : Math.max(10, width - 4);
+	const innerWidth = fullscreen ? width : Math.max(10, width - 2);
 	const outlineColor = isFailed ? "red" : "gray";
 	const statusColor = STATUS_COLOR[task.status];
 	const statusLabel = STATUS_LABEL[task.status];
@@ -452,8 +470,6 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 			flexDirection="column"
 			flexGrow={1}
 			width={width}
-			borderStyle={fullscreen ? undefined : "single"}
-			borderColor={fullscreen ? undefined : outlineColor}
 			paddingX={fullscreen ? 0 : 1}
 			overflow="hidden"
 		>
@@ -479,22 +495,8 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
 			{fullscreen ? (
 				<Box width={innerWidth} flexShrink={0}>
-					<Text>
-						<Text dimColor>
-							{task.id} [{statusLabel}]{scrollHint} —{" "}
-						</Text>
-						<Kbd k="↑↓" />
-						<Text dimColor> · </Text>
-						<Kbd k="PgUp/Dn" />
-						<Text dimColor> · </Text>
-						<Kbd k="Ctrl+U/D" />
-						<Text dimColor> · </Text>
-						<Kbd k="g/G" />
-						<Text dimColor> · </Text>
-						<Kbd k="f" />
-						<Text dimColor>/</Text>
-						<Kbd k="q" />
-						<Text dimColor> exit</Text>
+					<Text dimColor>
+						{task.id} [{statusLabel}]{scrollHint}
 					</Text>
 				</Box>
 			) : (

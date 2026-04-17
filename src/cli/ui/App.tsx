@@ -13,7 +13,6 @@ import useStdoutDimensions from "./useStdoutDimensions.js";
 import { type TaskState, useTaskExecutor } from "./useTaskState.js";
 
 const SIDEBAR_WIDTH = 30;
-const SIDEBAR_GAP = 1;
 
 interface AppProps {
 	executor: Executor;
@@ -32,19 +31,29 @@ const idleTask = (id: string): TaskState => ({
 	output: [],
 });
 
+// ─── Frame helper ──────────────────────────────────────────────────────────
+//
+// Without an outer frame, the only divider we draw is the horizontal line
+// between the top bar and the body. When the body shows the sidebar/content
+// split, a `┬` sits where the sidebar's right-border column begins so the
+// horizontal and vertical lines connect cleanly.
+const repeat = (ch: string, n: number) => (n > 0 ? ch.repeat(n) : "");
+
+const topBarDividerLine = (columns: number, showSidebarTee: boolean) => {
+	if (!showSidebarTee) return repeat("─", columns);
+	const leftRun = SIDEBAR_WIDTH - 1;
+	const rightRun = columns - SIDEBAR_WIDTH;
+	return `${repeat("─", leftRun)}┬${repeat("─", rightRun)}`;
+};
+
+// ─── Top bar ────────────────────────────────────────────────────────────────
 interface TopBarProps {
-	columns: number;
+	selectedKind: NavItem["kind"];
 	fullscreenLogs: boolean;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ columns, fullscreenLogs }) => (
-	<Box
-		borderStyle="single"
-		borderColor="blue"
-		paddingX={1}
-		width={columns}
-		flexShrink={0}
-	>
+const TopBar: React.FC<TopBarProps> = ({ selectedKind, fullscreenLogs }) => (
+	<Box paddingX={1} flexShrink={0}>
 		<Text bold>LayerMix TUI</Text>
 		<Text> | </Text>
 		{fullscreenLogs ? (
@@ -59,10 +68,38 @@ const TopBar: React.FC<TopBarProps> = ({ columns, fullscreenLogs }) => (
 				<Kbd k="Esc" />
 				<Text dimColor> exit</Text>
 			</Text>
+		) : selectedKind === "task" ? (
+			<Text>
+				<Kbd k="↑↓" />
+				<Text dimColor> nav · </Text>
+				<Kbd k="←→" />
+				<Text dimColor> menu · </Text>
+				<Kbd k="Enter" />
+				<Text dimColor> select · </Text>
+				<Kbd k="PgUp/Dn" />
+				<Text dimColor> scroll · </Text>
+				<Kbd k="f" />
+				<Text dimColor> fullscreen · </Text>
+				<Kbd k="q" />
+				<Text dimColor> quit</Text>
+			</Text>
+		) : selectedKind === "tag" ? (
+			<Text>
+				<Kbd k="↑↓" />
+				<Text dimColor> nav · </Text>
+				<Kbd k="←→" />
+				<Text dimColor> menu · </Text>
+				<Kbd k="Enter" />
+				<Text dimColor> select · </Text>
+				<Kbd k="q" />
+				<Text dimColor> quit</Text>
+			</Text>
 		) : (
 			<Text>
 				<Kbd k="↑↓" />
 				<Text dimColor> nav · </Text>
+				<Kbd k="Enter" />
+				<Text dimColor> select · </Text>
 				<Kbd k="q" />
 				<Text dimColor> quit</Text>
 			</Text>
@@ -70,6 +107,12 @@ const TopBar: React.FC<TopBarProps> = ({ columns, fullscreenLogs }) => (
 	</Box>
 );
 
+// ─── Sidebar ────────────────────────────────────────────────────────────────
+//
+// One column inside the body. Draws its own `borderRight` as the vertical
+// divider against the content pane. Internal sections use `borderBottom` to
+// separate themselves; at their edges the lines meet the outer `│` columns
+// cleanly enough for the single-line grid illusion to hold.
 interface SidebarProps {
 	selected: NavItem;
 	tasksList: TaskState[];
@@ -84,35 +127,58 @@ const Sidebar: React.FC<SidebarProps> = ({
 	selectedTaskId,
 	allTags,
 	selectedTag,
-}) => (
-	<Box
-		flexDirection="column"
-		marginRight={SIDEBAR_GAP}
-		width={SIDEBAR_WIDTH}
-		flexShrink={0}
-	>
+}) => {
+	const innerWidth = SIDEBAR_WIDTH - 1; // minus own right-border column
+	return (
 		<Box
+			flexDirection="column"
+			width={SIDEBAR_WIDTH}
+			flexShrink={0}
 			borderStyle="single"
 			borderColor="gray"
-			marginBottom={0}
-			width={SIDEBAR_WIDTH}
+			borderTop={false}
+			borderLeft={false}
+			borderBottom={false}
 		>
-			<Text
-				color={selected.kind === "overview" ? "cyan" : undefined}
-				bold={selected.kind === "overview"}
+			<Box
+				paddingX={1}
+				flexShrink={0}
+				borderStyle="single"
+				borderColor="gray"
+				borderTop={false}
+				borderLeft={false}
+				borderRight={false}
 			>
-				{selected.kind === "overview" ? "> " : "  "}Overview
-			</Text>
+				<Text
+					color={selected.kind === "overview" ? "cyan" : undefined}
+					bold={selected.kind === "overview"}
+				>
+					{selected.kind === "overview" ? "> " : "  "}Overview
+				</Text>
+			</Box>
+			<Box
+				flexShrink={0}
+				flexDirection="column"
+				borderStyle="single"
+				borderColor="gray"
+				borderTop={false}
+				borderLeft={false}
+				borderRight={false}
+			>
+				<TaskList
+					tasks={tasksList}
+					selectedTaskId={selectedTaskId}
+					width={innerWidth}
+				/>
+			</Box>
+			<Box flexShrink={0} flexDirection="column">
+				<TagList tags={allTags} selectedTag={selectedTag} width={innerWidth} />
+			</Box>
 		</Box>
-		<TaskList
-			tasks={tasksList}
-			selectedTaskId={selectedTaskId}
-			width={SIDEBAR_WIDTH}
-		/>
-		<TagList tags={allTags} selectedTag={selectedTag} width={SIDEBAR_WIDTH} />
-	</Box>
-);
+	);
+};
 
+// ─── App ────────────────────────────────────────────────────────────────────
 const App: React.FC<AppProps> = ({
 	executor,
 	allTasks,
@@ -132,7 +198,7 @@ const App: React.FC<AppProps> = ({
 
 	const tasksMap = useTaskExecutor(executor, allTaskIds);
 	const [columns, rows] = useStdoutDimensions();
-	const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH - SIDEBAR_GAP);
+	const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH);
 
 	const navItems = useMemo<NavItem[]>(
 		() => [
@@ -212,10 +278,8 @@ const App: React.FC<AppProps> = ({
 			setSelectedIndex((prev) => (prev < navItems.length - 1 ? prev + 1 : 0));
 			return;
 		}
-		// Enter or `r` schedules a tag. Task shortcuts live in TaskDetail.
-		if ((key.return || input === "r") && selected.kind === "tag") {
-			executor.scheduleRun(undefined, selected.name);
-		}
+		// All per-view shortcuts (r, R, c, x, Enter, arrows for menu) live in
+		// TaskDetail / TagDetail — App only handles the global stuff above.
 	});
 
 	const selectedTaskId = selected.kind === "task" ? selected.id : "";
@@ -248,39 +312,48 @@ const App: React.FC<AppProps> = ({
 				taskIds={tasksByTag[selected.name] ?? []}
 				tasks={tasksMap}
 				width={contentWidth}
+				onRun={() =>
+					executor.scheduleRun(undefined, (selected as { name: string }).name)
+				}
+				onClose={() => setSelectedIndex(0)}
 			/>
 		);
 	};
 
-	const body =
-		fullscreenLogs && selected.kind === "task" ? (
-			<TaskDetail
-				task={tasksMap[selected.id] ?? idleTask(selected.id)}
-				description={tasksById[selected.id]?.description}
-				cmd={tasksById[selected.id]?.cmd}
-				width={columns}
-				fullscreen
-				onToggleFullscreen={() => setFullscreenLogs(false)}
+	const isFullscreenTask = fullscreenLogs && selected.kind === "task";
+
+	// Body is either the fullscreen task view or the sidebar/content split.
+	// No outer frame means content extends flush to the terminal edges; the
+	// only divider left is the horizontal line below the top bar.
+	const bodyContent = isFullscreenTask ? (
+		<TaskDetail
+			task={tasksMap[selected.id] ?? idleTask(selected.id)}
+			description={tasksById[selected.id]?.description}
+			cmd={tasksById[selected.id]?.cmd}
+			width={columns}
+			fullscreen
+			onToggleFullscreen={() => setFullscreenLogs(false)}
+		/>
+	) : (
+		<Box flexDirection="row" flexGrow={1}>
+			<Sidebar
+				selected={selected}
+				tasksList={tasksList}
+				selectedTaskId={selectedTaskId}
+				allTags={allTags}
+				selectedTag={selectedTag}
 			/>
-		) : (
-			<Box flexDirection="row" flexGrow={1}>
-				<Sidebar
-					selected={selected}
-					tasksList={tasksList}
-					selectedTaskId={selectedTaskId}
-					allTags={allTags}
-					selectedTag={selectedTag}
-				/>
-				<Box width={contentWidth} flexDirection="column" flexShrink={0}>
-					{renderContentPane()}
-				</Box>
+			<Box width={contentWidth} flexDirection="column" flexShrink={0}>
+				{renderContentPane()}
 			</Box>
-		);
+		</Box>
+	);
 
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
-			<TopBar columns={columns} fullscreenLogs={fullscreenLogs} />
-			{body}
+			<TopBar selectedKind={selected.kind} fullscreenLogs={fullscreenLogs} />
+			<Text color="blue">{topBarDividerLine(columns, !isFullscreenTask)}</Text>
+			{bodyContent}
 		</Box>
 	);
 };

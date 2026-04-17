@@ -6,7 +6,6 @@ interface OverviewProps {
 	tasks: Record<string, TaskState>;
 	width: number;
 	title?: React.ReactNode;
-	borderColor?: string;
 	footer?: React.ReactNode;
 }
 
@@ -14,15 +13,8 @@ const LABEL_WIDTH = 20;
 const DURATION_WIDTH = 10;
 const DURATION_GAP = 1;
 const PADDING = 1;
-const BORDER_WIDTH = 2;
 
-const Overview: React.FC<OverviewProps> = ({
-	tasks,
-	width,
-	title,
-	borderColor = "gray",
-	footer,
-}) => {
+const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 	const [now, setNow] = React.useState(Date.now());
 
 	React.useEffect(() => {
@@ -64,8 +56,8 @@ const Overview: React.FC<OverviewProps> = ({
 	}, [taskList]);
 
 	// Waterfall — strictly bounded by the pane we were given.
-	// Inside the pane: border (both sides) + padding (both sides) + label + chart + gap + duration must fit.
-	const innerWidth = Math.max(0, width - PADDING * 2 - BORDER_WIDTH);
+	// Parent provides the outer frame, so we only reserve padding here.
+	const innerWidth = Math.max(0, width - PADDING * 2);
 	const chartWidth = Math.max(
 		5,
 		innerWidth - LABEL_WIDTH - DURATION_GAP - DURATION_WIDTH,
@@ -130,21 +122,15 @@ const Overview: React.FC<OverviewProps> = ({
 	}, [taskList]);
 
 	return (
-		<Box
-			flexDirection="column"
-			paddingX={PADDING}
-			flexGrow={1}
-			width={width}
-			borderStyle="single"
-			borderColor={borderColor}
-		>
+		<Box flexDirection="column" paddingX={PADDING} flexGrow={1} width={width}>
 			{title ?? (
 				<Text bold underline>
 					Overview
 				</Text>
 			)}
 
-			<Box marginTop={1} flexDirection="column">
+			{/* Waterfall fills the available space so stats block below stays pinned to the bottom. */}
+			<Box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
 				{taskList.map((task) => (
 					<Box key={task.id} minHeight={1} width={innerWidth}>
 						<Box width={LABEL_WIDTH} flexShrink={0}>
@@ -174,11 +160,15 @@ const Overview: React.FC<OverviewProps> = ({
 				))}
 			</Box>
 
+			{/* Stats block — embedded (no outer border), just a top divider. */}
 			<Box
-				marginTop={1}
 				borderStyle="single"
 				borderColor="gray"
+				borderLeft={false}
+				borderRight={false}
+				borderBottom={false}
 				flexDirection="column"
+				flexShrink={0}
 				width={innerWidth}
 			>
 				<Text>Total Duration: {(totalDuration / 1000).toFixed(2)}s</Text>
@@ -197,7 +187,7 @@ const Overview: React.FC<OverviewProps> = ({
 				)}
 			</Box>
 
-			{footer && <Box marginTop={1}>{footer}</Box>}
+			{footer && <Box flexShrink={0}>{footer}</Box>}
 		</Box>
 	);
 };
