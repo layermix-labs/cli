@@ -41,8 +41,11 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm run release
-          version: pnpm run version
+          # Dogfooded — both commands route through layermix so the workflow
+          # stays in sync with `task-runner.json`. `--ci` forces linear mode
+          # so output streams cleanly to the action log.
+          publish: pnpm start release --ci
+          version: pnpm start version --ci
           commit: "chore(release): version packages"
           title: "chore(release): version packages"
         env:

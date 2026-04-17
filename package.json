@@ -41,10 +41,7 @@
 	],
 	"scripts": {
 		"start": "vite-node src/cli/index.tsx",
-		"prepublishOnly": "vite-node scripts/generate-schema.ts && rm -rf dist && tsc --noCheck && chmod +x dist/cli/index.js",
-		"changeset": "changeset",
-		"version": "changeset version",
-		"release": "changeset publish"
+		"prepublishOnly": "vite-node scripts/generate-schema.ts && rm -rf dist && tsc --noCheck && chmod +x dist/cli/index.js"
 	},
 	"packageManager": "pnpm@10.5.2",
 	"dependencies": {

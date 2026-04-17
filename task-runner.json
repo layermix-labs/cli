@@ -81,6 +81,27 @@
 					"default": ""
 				}
 			]
+		},
+		{
+			"id": "changeset",
+			"cmd": "changeset",
+			"description": "Create a new changeset interactively: pick a bump (patch/minor/major) and write a one-line summary that becomes the next changelog entry. The release bot picks up the resulting .changeset/*.md file on next push to master and opens (or updates) a 'Version Packages' PR. NOTE: interactive — stdin doesn't reach the child from inside the TUI; run from a non-TUI shell (`pnpm exec changeset` or `pnpm start changeset --ci`).",
+			"dependsOn": [],
+			"group": "release"
+		},
+		{
+			"id": "version",
+			"cmd": "changeset version",
+			"description": "Consume every pending changeset: bump package.json, prepend the changelog, and delete the .changeset/*.md files. Normally run by the release bot inside its 'Version Packages' PR; only invoke locally for one-off manual releases when the bot is broken.",
+			"dependsOn": [],
+			"group": "release"
+		},
+		{
+			"id": "release",
+			"cmd": "changeset publish",
+			"description": "Publish every bumped package to npm. `prepublishOnly` (regen schema + tsc + chmod the bin) runs automatically per-package, so the published artifact always carries fresh dist/ and schema.json. Used by the release workflow after the Version PR is merged.",
+			"dependsOn": [],
+			"group": "release"
 		}
 	],
 	"env": {
@@ -91,6 +112,7 @@
 		"fix": "Apply all autofixes - might be unsafe"
 	},
 	"groups": {
-		"build": "Build artifacts: clean dist, compile to JS + chmod the bin, regenerate schema."
+		"build": "Build artifacts: clean dist, compile to JS + chmod the bin, regenerate schema.",
+		"release": "Changesets workflow: capture a changeset, version packages from pending changesets, publish to npm."
 	}
 }

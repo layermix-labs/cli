@@ -35,12 +35,20 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
 ```json
 {
   "$schema": "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
+  "defaultRun": "-t test",
   "tasks": [
     { "id": "clean",   "cmd": "rm -rf dist",   "dependsOn": [],                  "group": "build" },
     { "id": "compile", "cmd": "tsc",           "dependsOn": ["clean"],           "group": "build" },
-    { "id": "bundle",  "cmd": "esbuild …",     "dependsOn": ["compile"],         "group": "build" },
     { "id": "lint",    "cmd": "eslint .",      "dependsOn": [],                  "tags": ["test"] },
-    { "id": "test",    "cmd": "vitest run",    "dependsOn": ["compile", "lint"], "tags": ["test"] }
+    { "id": "test",    "cmd": "vitest run",    "dependsOn": ["compile", "lint"], "tags": ["test"] },
+    {
+      "id": "test-file",
+      "cmd": "vitest run $1 -t $2",
+      "args": [
+        { "type": "file", "label": "Test file", "glob": "**/*.test.ts" },
+        { "type": "text", "label": "Test name pattern", "default": "" }
+      ]
+    }
   ],
   "env": { "NODE_ENV": "development" },
   "tags":   { "test":  "Quality gates run in CI" },
@@ -51,20 +59,73 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
 Per-task fields:
 
 - `id` (required) — unique name. Can contain any characters, including emoji.
-- `cmd` (required) — shell command to run.
+- `cmd` (required) — shell command to run. May reference positional `$1`, `$2`, ... placeholders that get filled in from `args` (see [Task arguments](#task-arguments)).
 - `dependsOn` — task ids this task waits for.
 - `tags` — string array. Tags have both **UI** and **CLI** semantics: `layermix -t test` runs every task carrying that tag (plus their deps).
 - `group` — single string. Groups are **UI-only** — they reorganise the TUI sidebar, but have no CLI surface. See [Tags vs Groups](#tags-vs-groups).
 - `description` — optional short blurb, shown in `list` output and in the TUI task header.
 - `cwd`, `env` — optional overrides. Task `env` merges on top of global `env`.
+- `args` — optional positional input declarations. See [Task arguments](#task-arguments).
 
 Top-level fields:
 
 - `env` — global environment applied to every task.
 - `tags` — optional `name → description` map. Annotates tag names shown in `list` output and in TUI headers. Tag membership still lives on each task via the task's `tags` array.
 - `groups` — same shape for group names.
+- `defaultRun` — CLI-style fallback target. See [`defaultRun`](#defaultrun).
 
 Configs are discovered via [`cosmiconfig`](https://github.com/cosmiconfig/cosmiconfig) and **merged upward** through parent directories: a nearer config overrides tasks of the same id in an outer config (useful in monorepos). `$schema` enables IDE autocompletion — the schema is hosted on GitHub; `layermix init` scaffolds a config with the correct reference.
+
+### Task arguments
+
+A task can declare positional input slots referenced as `$1`, `$2`, ... in its `cmd`. When the task runs, layermix collects each slot's value (TUI prompt, CLI flag, or declared default), shell-quotes it, and substitutes it into the command.
+
+```json
+{
+  "id": "test-file",
+  "cmd": "vitest run $1 -t $2",
+  "args": [
+    { "type": "file", "label": "Test file", "glob": "**/*.test.ts" },
+    { "type": "text", "label": "Test name pattern", "default": "" }
+  ]
+}
+```
+
+Four input types:
+
+| Type | Picker | Useful options |
+|------|--------|----------------|
+| `text` | Free-form text input | `default` (string) |
+| `select` | Pick one from a list | `choices` (string[]), `default` |
+| `file` | Glob-filtered file picker | `glob` (defaults to `**/*`), `multiple` (checklist mode) |
+| `folder` | Glob-filtered directory picker | `glob`, `multiple` |
+
+`label` is shown in the picker prompt; falls back to `Argument $N` when omitted.
+
+**TUI flow** — pressing Run on a task with declared args opens a modal that walks each input in turn (Enter to advance, Esc to cancel). After submission, the task runs and the sidebar selection auto-jumps to it so the log streams into view. After a successful run, the TaskDetail menu adds a **Rerun** option that replays the same args without re-prompting; after a failure it adds a **Run** option that re-opens the picker so you can change inputs.
+
+**CLI flow** — pass values positionally with `-a` / `--arg` (repeatable, in declared order). Multi-select args take a comma-separated string:
+
+```sh
+layermix test-file -a "src/foo.test.ts" -a "cycle detection"
+layermix lint-files -a "src/a.ts,src/b.ts"   # multi-select file arg
+```
+
+`--arg` rejects multi-task targets (no unambiguous mapping). When a value is omitted, the declared `default` is used (text/select only — file/folder args are required to have a picked value).
+
+`file` / `folder` paths in the picker are resolved against the task's `cwd` (or the config root when `cwd` is unset). Multi-select joins paths with spaces, each shell-quoted independently.
+
+### `defaultRun`
+
+CLI-style fallback target used when no task ids or `-t <tag>` are passed in **non-TUI** modes (CI, AI-agent, piped shells). TUI sessions stay idle so the explicit "pick what to run" UX is preserved.
+
+```json
+"defaultRun": "-t test"        // tag selector
+"defaultRun": "build"          // single task id
+"defaultRun": "build deploy"   // multiple task ids
+```
+
+The format mirrors what you'd type after `layermix`. Explicit user targets always win — `defaultRun` only fires when both the positional ids and `-t` are missing. In CI/AI mode, this also pre-empts the previous "run everything" fallback, so `--ci` with `defaultRun` set runs only the configured target.
 
 ### Tags vs Groups
 
@@ -116,9 +177,10 @@ When stdout is a TTY, `layermix` launches an Ink TUI. Layout:
 | `/` | Anywhere | Start task-id search |
 | `Esc` | Search mode | Cancel search |
 | `q` / `Ctrl+C` | Anywhere | Quit |
-| `r` | Task detail | Run (ignores deps) — manual override |
+| `r` | Task detail | Run (ignores deps; opens picker if task has `args`) |
+| `r` | Task detail, FAILURE | Retry — replays the last args silently |
 | `r` | Tag detail | Run Tag (re-runs even if completed) |
-| `R` | Task detail | Run With Deps (re-runs the task + any completed upstream) |
+| `R` | Task detail | Run With Deps (re-runs the task + any completed upstream). Hidden when the task has no `dependsOn` |
 | `F` | Tag detail | Retry Failed (scoped to this tag's failed tasks + downstream) |
 | `K` | Task detail, running | Kill the task (fails it, cascades skip downstream) |
 | `c` | Task detail | Copy logs to clipboard |
@@ -126,6 +188,8 @@ When stdout is a TTY, `layermix` launches an Ink TUI. Layout:
 | `f` | Task detail | Toggle log fullscreen |
 | `PgUp` / `PgDn`, `Ctrl+u/d`, `Ctrl+b/f` | Task detail | Scroll logs |
 | `g` / `G` | Task detail | Jump to top / tail |
+| Menu nav (`←` / `→` / `h` / `l` + `Enter`) | Task detail, SUCCESS with `args` | Activate **Rerun** (replay last args) — no shortcut, menu only |
+| Menu nav | Task detail, FAILURE with `args` | Activate **Run** to re-pick args |
 
 #### Status icons
 
@@ -148,8 +212,11 @@ Press `/` and type any substring of a task id. Matches filter the Tasks list as 
 
 Re-run semantics depend on which "Run" action you hit:
 
-- **Task detail → Run (`r`)** — fires just this one task, ignores whether upstream deps are up to date. Useful for power users who know inputs haven't changed.
-- **Task detail → Run With Deps (`R`)** — re-runs this task *and* re-runs any already-completed upstream deps from the top. Useful when you want a fresh build from scratch.
+- **Task detail → Run (`r`)** — fires just this one task, ignores whether upstream deps are up to date. Useful for power users who know inputs haven't changed. If the task declares [`args`](#task-arguments), opens the picker first.
+- **Task detail → Rerun** (success state, args-aware tasks; menu only) — replays the last collected args without re-prompting. The default-highlighted option after a green run.
+- **Task detail → Run With Deps (`R`)** — re-runs this task *and* re-runs any already-completed upstream deps from the top. Useful when you want a fresh build from scratch. Hidden for tasks with no `dependsOn` (would duplicate Run).
+- **Task detail → Retry (`r`, failure state)** — replays the last args silently. The fast iteration path after a red run.
+- **Task detail → Run** (failure state, args-aware tasks; menu only) — re-opens the picker so you can change inputs that caused the failure.
 - **Tag detail → Run Tag (`r`)** — re-runs every task carrying the tag, even if they already succeeded. Upstream deps **outside** the tag stay cached.
 - **Tag detail → Retry Failed (`F`)** — only resets tasks in this tag that are currently in `FAILURE`, plus their downstream dependents. Skips tasks that succeeded. Great for "iterate on the lint failures without re-running tests".
 
@@ -161,7 +228,7 @@ The retry helper also resets tasks downstream of a failure, so re-running isn't 
 
 CI mode is auto-detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or via the explicit `--ci` flag. AI-agent mode is detected from coding-agent env vars (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_AGENT`, `CURSOR_TRACE_ID`, `AIDER_MODEL`, `AIDER_CHAT_HISTORY_FILE`, `CONTINUE_SESSION_ID`) or the explicit `--ai` flag; the generic `AI_AGENT` env var is a manual opt-in for anything unlisted.
 
-In CI/AI mode, an empty target runs **all** tasks. In normal mode, an empty target runs nothing — pass task ids or `-t <tag>`.
+In CI/AI mode, an empty target runs **all** tasks unless [`defaultRun`](#defaultrun) is set, in which case the configured target wins. In normal piped (non-CI, non-TTY) mode, an empty target prints a hint and exits 0 — unless `defaultRun` is set, which fires there too.
 
 ---
 
@@ -188,6 +255,12 @@ Select X in the task detail, press `K`. It's killed (SIGTERM, then SIGKILL after
 **"Wire it into GitLab / GitHub Actions."**
 `layermix -t test --junit report.xml` — see [JUnit report](#junit-report) below.
 
+**"I keep typing `vitest run path/to/foo.test.ts -t 'some name'` — make it a one-keystroke task."**
+Declare an [args-aware task](#task-arguments) — `cmd: "vitest run $1 -t $2"` with a `file` arg + a `text` arg. From the TUI, Enter on the task opens a file picker scoped to your test glob, then a name-pattern prompt. After the first run, **Rerun** replays the same selection until you change it. From the CLI, `layermix test-file -a path/to/foo.test.ts -a "some name"` does the same in one line.
+
+**"CI should just run my quality gates by default — without remembering the flag."**
+Set `defaultRun: "-t test"` (or any task id) at the top of `task-runner.json`. CI/AI invocations with no explicit target use it; explicit `layermix -t deploy` from the command line still wins.
+
 **"I'm running from Claude Code / Cursor."**
 Nothing to do — auto-detected via env vars. Output drops to linear, and an empty target auto-runs everything, so the agent sees a clean machine-readable stream without any flags.
 
@@ -207,9 +280,10 @@ layermix init [--force]                  # scaffold task-runner.json
 | Flag | Meaning |
 |------|---------|
 | `-t, --tag <tag>` | run all tasks carrying this tag (and their deps) |
+| `-a, --arg <value>` | positional value for the target task's `args[i]` (repeatable, in order). Comma-separated for multi-select file/folder args. Single-task targets only — see [Task arguments](#task-arguments) |
 | `--concurrency <n>` | cap parallelism (defaults to CPU count) |
 | `--output-only-failed` | linear mode: only print logs for failed tasks |
-| `--ci` | force linear mode, auto-run all tasks if no target |
+| `--ci` | force linear mode, auto-run all tasks (or `defaultRun`) if no target |
 | `--ai` | alias for `--ci` |
 | `--junit <path>` | write a JUnit XML report on exit |
 | `--dry-run-json` | print the execution plan as JSON, run nothing |
