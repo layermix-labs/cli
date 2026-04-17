@@ -6,14 +6,16 @@
 			"cmd": "rm -rf dist",
 			"description": "Remove the dist/ output directory so the next build starts from a clean slate.",
 			"tags": ["build"],
-			"dependsOn": []
+			"dependsOn": [],
+			"group": "build"
 		},
 		{
 			"id": "compile",
 			"cmd": "tsc",
 			"description": "Compile TypeScript sources to JavaScript using the project's tsconfig.",
 			"dependsOn": ["clean"],
-			"tags": ["build"]
+			"tags": ["build"],
+			"group": "build"
 		},
 		{
 			"id": "lint",
@@ -48,7 +50,8 @@
 			"cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
 			"description": "Bundle the compiled entry point into a single dist/bundle.js via esbuild.",
 			"dependsOn": ["compile"],
-			"tags": ["build"]
+			"tags": ["build"],
+			"group": "build"
 		},
 		{
 			"id": "fix",

@@ -33,6 +33,9 @@
 							"type": "string"
 						}
 					},
+					"group": {
+						"type": "string"
+					},
 					"cwd": {
 						"type": "string"
 					},
@@ -63,8 +66,16 @@
 			"additionalProperties": {
 				"type": "string"
 			}
+		},
+		"groups": {
+			"default": {},
+			"type": "object",
+			"properties": {},
+			"additionalProperties": {
+				"type": "string"
+			}
 		}
 	},
-	"required": ["tasks", "env", "tags"],
+	"required": ["tasks", "env", "tags", "groups"],
 	"additionalProperties": false
 }

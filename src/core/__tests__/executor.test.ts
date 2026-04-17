@@ -64,6 +64,7 @@ describe("Executor", () => {
 			tasks: mockTasks,
 			env: {},
 			tags: {},
+			groups: {},
 		};
 
 		graph = new TaskGraph(mockConfig);

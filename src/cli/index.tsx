@@ -213,8 +213,11 @@ program
 
 			console.log(chalk.cyan("Available tasks:"));
 			tasks.forEach((task) => {
+				const labels: string[] = [];
+				if (task.tags.length) labels.push(`tags: ${task.tags.join(", ")}`);
+				if (task.group) labels.push(`group: ${task.group}`);
 				console.log(
-					`- ${chalk.bold(task.id)}: ${task.cmd} ${task.tags.length ? chalk.gray(`[tags: ${task.tags.join(", ")}]`) : ""}`,
+					`- ${chalk.bold(task.id)}: ${task.cmd} ${labels.length ? chalk.gray(`[${labels.join("; ")}]`) : ""}`,
 				);
 				if (task.description) {
 					console.log(`  ${chalk.gray(task.description)}`);
@@ -233,6 +236,16 @@ program
 					.sort(([a], [b]) => a.localeCompare(b))
 					.forEach(([name, description]) => {
 						console.log(`- ${chalk.magenta(`#${name}`)}: ${description}`);
+					});
+			}
+
+			const groupEntries = Object.entries(config.groups);
+			if (groupEntries.length > 0) {
+				console.log(chalk.cyan("\nGroups:"));
+				groupEntries
+					.sort(([a], [b]) => a.localeCompare(b))
+					.forEach(([name, description]) => {
+						console.log(`- ${chalk.blue(name)}: ${description}`);
 					});
 			}
 		} catch (error) {
@@ -373,6 +386,7 @@ program
 						executor={executor}
 						allTasks={allTasks}
 						tagDescriptions={config.tags}
+						groupDescriptions={config.groups}
 					/>,
 					{ patchConsole: false },
 				);

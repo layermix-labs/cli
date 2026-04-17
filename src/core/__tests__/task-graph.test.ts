@@ -11,6 +11,7 @@ describe("TaskGraph", () => {
 			},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 		const graph = new TaskGraph(config);
 		expect(graph.getTopologicalSort()).toEqual(["A", "B"]);
@@ -36,6 +37,7 @@ describe("TaskGraph", () => {
 			},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 		const graph = new TaskGraph(config);
 		const order = graph.getTopologicalSort();
@@ -53,6 +55,7 @@ describe("TaskGraph", () => {
 			},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 		expect(() => new TaskGraph(config)).toThrow(/Circular dependency/);
 	});
@@ -64,6 +67,7 @@ describe("TaskGraph", () => {
 			},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 		expect(() => new TaskGraph(config)).toThrow(/depends on missing task "B"/);
 	});
@@ -79,6 +83,7 @@ describe("TaskGraph", () => {
 			},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 		const graph = new TaskGraph(config);
 		const layers = graph.getExecutionLayers();

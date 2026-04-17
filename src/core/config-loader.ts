@@ -61,6 +61,7 @@ export class ConfigLoader {
 			tasks,
 			env: config.env,
 			tags: config.tags,
+			groups: config.groups,
 		};
 	}
 
@@ -69,12 +70,14 @@ export class ConfigLoader {
 			tasks: {},
 			env: {},
 			tags: {},
+			groups: {},
 		};
 
 		for (const config of configs) {
 			merged.env = { ...merged.env, ...config.env };
 			merged.tasks = { ...merged.tasks, ...config.tasks };
 			merged.tags = { ...merged.tags, ...config.tags };
+			merged.groups = { ...merged.groups, ...config.groups };
 		}
 
 		return merged;

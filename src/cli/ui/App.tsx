@@ -5,10 +5,9 @@ import type { Executor } from "../../core/executor.js";
 import type { Task } from "../../types/config.js";
 import Kbd from "./Kbd.js";
 import Overview from "./Overview.js";
+import Sidebar, { type NavItem } from "./Sidebar.js";
 import TagDetail from "./TagDetail.js";
-import TagList from "./TagList.js";
 import TaskDetail from "./TaskDetail.js";
-import TaskList from "./TaskList.js";
 import useStdoutDimensions from "./useStdoutDimensions.js";
 import { type TaskState, useTaskExecutor } from "./useTaskState.js";
 
@@ -18,12 +17,8 @@ interface AppProps {
 	executor: Executor;
 	allTasks: Task[];
 	tagDescriptions?: Record<string, string>;
+	groupDescriptions?: Record<string, string>;
 }
-
-type NavItem =
-	| { kind: "overview" }
-	| { kind: "task"; id: string }
-	| { kind: "tag"; name: string };
 
 const idleTask = (id: string): TaskState => ({
 	id,
@@ -66,6 +61,7 @@ const HintList: React.FC<{ hints: Hint[] }> = ({ hints }) => (
 const NAV_HINT: Hint = ["↑↓", "nav"];
 const MENU_HINT: Hint = ["←→", "menu"];
 const ENTER_HINT: Hint = ["Enter", "select"];
+const SPACE_HINT: Hint = ["Space", "expand"];
 const SEARCH_HINT: Hint = ["/", "search"];
 const QUIT_HINT: Hint = ["q", "quit"];
 
@@ -81,6 +77,14 @@ const TAG_HINTS: Hint[] = [
 	NAV_HINT,
 	MENU_HINT,
 	ENTER_HINT,
+	SPACE_HINT,
+	SEARCH_HINT,
+	QUIT_HINT,
+];
+const GROUP_HINTS: Hint[] = [
+	NAV_HINT,
+	ENTER_HINT,
+	SPACE_HINT,
 	SEARCH_HINT,
 	QUIT_HINT,
 ];
@@ -102,6 +106,7 @@ const TopBar: React.FC<TopBarProps> = ({
 	let hints: Hint[];
 	if (selectedKind === "task") hints = TASK_HINTS;
 	else if (selectedKind === "tag") hints = TAG_HINTS;
+	else if (selectedKind === "group") hints = GROUP_HINTS;
 	else hints = OVERVIEW_HINTS;
 
 	return (
@@ -140,88 +145,12 @@ const TopBar: React.FC<TopBarProps> = ({
 	);
 };
 
-// ─── Sidebar ────────────────────────────────────────────────────────────────
-//
-// One column inside the body. Draws its own `borderRight` as the vertical
-// divider against the content pane. Internal sections use `borderBottom` to
-// separate themselves; at their edges the lines meet the outer `│` columns
-// cleanly enough for the single-line grid illusion to hold.
-interface SidebarProps {
-	selected: NavItem;
-	tasksList: TaskState[];
-	selectedTaskId: string;
-	allTags: string[];
-	selectedTag: string;
-	searchMode: boolean;
-	searchQuery: string;
-}
-
-const Sidebar: React.FC<SidebarProps> = ({
-	selected,
-	tasksList,
-	selectedTaskId,
-	allTags,
-	selectedTag,
-	searchMode,
-	searchQuery,
-}) => {
-	const innerWidth = SIDEBAR_WIDTH - 1; // minus own right-border column
-	return (
-		<Box
-			flexDirection="column"
-			width={SIDEBAR_WIDTH}
-			flexShrink={0}
-			borderStyle="single"
-			borderColor="gray"
-			borderTop={false}
-			borderLeft={false}
-			borderBottom={false}
-		>
-			<Box
-				paddingX={1}
-				flexShrink={0}
-				borderStyle="single"
-				borderColor="gray"
-				borderTop={false}
-				borderLeft={false}
-				borderRight={false}
-			>
-				<Text
-					color={selected.kind === "overview" ? "cyan" : undefined}
-					bold={selected.kind === "overview"}
-				>
-					{selected.kind === "overview" ? "> " : "  "}Overview
-				</Text>
-			</Box>
-			<Box
-				flexShrink={0}
-				flexDirection="column"
-				borderStyle="single"
-				borderColor="gray"
-				borderTop={false}
-				borderLeft={false}
-				borderRight={false}
-			>
-				<TaskList
-					tasks={tasksList}
-					selectedTaskId={selectedTaskId}
-					width={innerWidth}
-					searchActive={searchMode}
-					searchQuery={searchQuery}
-				/>
-			</Box>
-			<Box flexShrink={0} flexDirection="column">
-				<TagList tags={allTags} selectedTag={selectedTag} width={innerWidth} />
-			</Box>
-		</Box>
-	);
-};
-
 // ─── App ────────────────────────────────────────────────────────────────────
 const App: React.FC<AppProps> = ({
 	executor,
 	allTasks,
 	tagDescriptions = {},
+	groupDescriptions = {},
 }) => {
 	const { exit } = useApp();
 
@@ -235,6 +164,12 @@ const App: React.FC<AppProps> = ({
 		return Array.from(set).sort();
 	}, [allTasks]);
 
+	const allGroups = useMemo(() => {
+		const set = new Set<string>();
+		for (const t of allTasks) if (t.group) set.add(t.group);
+		return Array.from(set).sort();
+	}, [allTasks]);
+
 	const tasksMap = useTaskExecutor(executor, allTaskIds);
 	const [columns, rows] = useStdoutDimensions();
 	const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH);
@@ -243,34 +178,21 @@ const App: React.FC<AppProps> = ({
 	const [fullscreenLogs, setFullscreenLogs] = useState(false);
 	const [searchMode, setSearchMode] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
-
-	// Case-insensitive substring match against task ids. When no query is set
-	// (search closed, or `/` just opened with an empty buffer) we show every
-	// task so the sidebar doesn't flash empty between keystrokes.
-	const filteredTaskIds = useMemo(() => {
-		if (!searchQuery) return allTaskIds;
-		const q = searchQuery.toLowerCase();
-		return allTaskIds.filter((id) => id.toLowerCase().includes(q));
-	}, [searchQuery, allTaskIds]);
-
-	const navItems = useMemo<NavItem[]>(
-		() => [
-			{ kind: "overview" },
-			...filteredTaskIds.map<NavItem>((id) => ({ kind: "task", id })),
-			...allTags.map<NavItem>((name) => ({ kind: "tag", name })),
-		],
-		[filteredTaskIds, allTags],
+	// Persist which collapsibles are open across re-renders. Default-closed for
+	// both groups and tags — long task runners often have many of each, so the
+	// sidebar stays readable on first open.
+	const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+		() => new Set(),
+	);
+	const [expandedTags, setExpandedTags] = useState<Set<string>>(
+		() => new Set(),
 	);
 
-	const tasksList = useMemo(
-		() =>
-			filteredTaskIds.map(
-				(id) => tasksMap[id] ?? { id, status: "IDLE" as const, output: [] },
-			),
-		[filteredTaskIds, tasksMap],
-	);
-
-	const selected = navItems[selectedIndex] ?? navItems[0];
+	const tasksById = useMemo(() => {
+		const map: Record<string, Task> = {};
+		for (const t of allTasks) map[t.id] = t;
+		return map;
+	}, [allTasks]);
 
 	const tasksByTag = useMemo(() => {
 		const map: Record<string, string[]> = {};
@@ -283,11 +205,123 @@ const App: React.FC<AppProps> = ({
 		return map;
 	}, [allTasks]);
 
-	const tasksById = useMemo(() => {
-		const map: Record<string, Task> = {};
-		for (const t of allTasks) map[t.id] = t;
+	const tasksByGroup = useMemo(() => {
+		const map: Record<string, string[]> = {};
+		for (const t of allTasks) {
+			if (!t.group) continue;
+			if (!map[t.group]) map[t.group] = [];
+			map[t.group].push(t.id);
+		}
 		return map;
 	}, [allTasks]);
+
+	// Case-insensitive substring match against task ids. When no query is set
+	// (search closed, or `/` just opened with an empty buffer) we show every
+	// task so the sidebar doesn't flash empty between keystrokes.
+	const filteredTaskIds = useMemo(() => {
+		if (!searchQuery) return allTaskIds;
+		const q = searchQuery.toLowerCase();
+		return allTaskIds.filter((id) => id.toLowerCase().includes(q));
+	}, [searchQuery, allTaskIds]);
+
+	// Tasks with no `group` show up in the main Tasks list. Grouped tasks only
+	// appear under their collapsible group header.
+	const ungroupedTaskIds = useMemo(
+		() => filteredTaskIds.filter((id) => !tasksById[id]?.group),
+		[filteredTaskIds, tasksById],
+	);
+
+	// During search, auto-expand every collapsible that contains matches so the
+	// user can see *where* their query hit. Manual expansion state still wins
+	// for groups/tags that have no matches (they stay as the user left them).
+	const effectiveExpandedGroups = useMemo(() => {
+		if (!searchQuery) return expandedGroups;
+		const next = new Set(expandedGroups);
+		for (const g of allGroups) {
+			const members = tasksByGroup[g] ?? [];
+			if (members.some((id) => filteredTaskIds.includes(id))) next.add(g);
+		}
+		return next;
+	}, [expandedGroups, searchQuery, allGroups, tasksByGroup, filteredTaskIds]);
+
+	const effectiveExpandedTags = useMemo(() => {
+		if (!searchQuery) return expandedTags;
+		const next = new Set(expandedTags);
+		for (const tag of allTags) {
+			const members = tasksByTag[tag] ?? [];
+			if (members.some((id) => filteredTaskIds.includes(id))) next.add(tag);
+		}
+		return next;
+	}, [expandedTags, searchQuery, allTags, tasksByTag, filteredTaskIds]);
+
+	const navItems = useMemo<NavItem[]>(() => {
+		const items: NavItem[] = [{ kind: "overview" }];
+
+		for (const id of ungroupedTaskIds) items.push({ kind: "task", id });
+
+		for (const g of allGroups) {
+			items.push({ kind: "group", name: g });
+			if (effectiveExpandedGroups.has(g)) {
+				const members = (tasksByGroup[g] ?? []).filter(
+					(id) => !searchQuery || filteredTaskIds.includes(id),
+				);
+				for (const id of members) {
+					items.push({
+						kind: "task",
+						id,
+						under: { section: "group", name: g },
+					});
+				}
+			}
+		}
+
+		for (const tag of allTags) {
+			items.push({ kind: "tag", name: tag });
+			if (effectiveExpandedTags.has(tag)) {
+				const members = (tasksByTag[tag] ?? []).filter(
+					(id) => !searchQuery || filteredTaskIds.includes(id),
+				);
+				for (const id of members) {
+					items.push({
+						kind: "task",
+						id,
+						under: { section: "tag", name: tag },
+					});
+				}
+			}
+		}
+
+		return items;
+	}, [
+		ungroupedTaskIds,
+		allGroups,
+		effectiveExpandedGroups,
+		tasksByGroup,
+		allTags,
+		effectiveExpandedTags,
+		tasksByTag,
+		filteredTaskIds,
+		searchQuery,
+	]);
+
+	const selected = navItems[selectedIndex] ?? navItems[0];
+
+	// Returns a state updater that flips membership of `name` in the given
+	// Set. Shared between expandedGroups / expandedTags so the two toggle
+	// branches aren't a copy-paste pair.
+	const toggleInSet =
+		(name: string) =>
+		(prev: Set<string>): Set<string> => {
+			const next = new Set(prev);
+			if (next.has(name)) next.delete(name);
+			else next.add(name);
+			return next;
+		};
+
+	const toggleExpansion = (item: NavItem) => {
+		if (item.kind === "group") setExpandedGroups(toggleInSet(item.name));
+		else if (item.kind === "tag") setExpandedTags(toggleInSet(item.name));
+	};
 
 	// Any non-task selection automatically leaves fullscreen mode.
 	useEffect(() => {
@@ -375,6 +409,12 @@ const App: React.FC<AppProps> = ({
 			return;
 		}
 
+		// Space toggles expansion on group/tag headers. No-op on other rows.
+		if (input === " ") {
+			toggleExpansion(selected);
+			return;
+		}
+
 		// Global quit. TaskDetail owns `q` while fullscreen (exits fullscreen),
 		// so we only reach here outside that mode thanks to the guard above.
 		if (input === "q") {
@@ -393,12 +433,42 @@ const App: React.FC<AppProps> = ({
 		// TaskDetail / TagDetail — App only handles the global stuff above.
 	});
 
-	const selectedTaskId = selected.kind === "task" ? selected.id : "";
-	const selectedTag = selected.kind === "tag" ? selected.name : "";
-
 	const renderContentPane = () => {
 		if (selected.kind === "overview") {
 			return <Overview tasks={tasksMap} width={contentWidth} />;
+		}
+		if (selected.kind === "group") {
+			// Groups are UI-only (no CLI, no run/retry actions) per design — so
+			// the detail pane is a scoped Overview showing just the members.
+			const ids = tasksByGroup[selected.name] ?? [];
+			const scoped: Record<string, TaskState> = {};
+			for (const id of ids) if (tasksMap[id]) scoped[id] = tasksMap[id];
+			const description = groupDescriptions[selected.name];
+			return (
+				<Overview
+					tasks={scoped}
+					width={contentWidth}
+					title={
+						<Box flexDirection="column">
+							<Box>
+								<Text bold>Group: </Text>
+								<Text color="blue" bold>
+									{selected.name}
+								</Text>
+								<Text dimColor>
+									{" "}
+									({ids.length} task{ids.length === 1 ? "" : "s"})
+								</Text>
+							</Box>
+							{description ? (
+								<Text dimColor wrap="truncate-end">
+									{description}
+								</Text>
+							) : null}
+						</Box>
+					}
+				/>
+			);
 		}
 		if (selected.kind === "task") {
 			return (
@@ -457,12 +527,13 @@ const App: React.FC<AppProps> = ({
 	) : (
 		<Box flexDirection="row" flexGrow={1}>
 			<Sidebar
-				selected={selected}
-				tasksList={tasksList}
-				selectedTaskId={selectedTaskId}
-				allTags={allTags}
-				selectedTag={selectedTag}
-				searchMode={searchMode}
+				width={SIDEBAR_WIDTH}
+				navItems={navItems}
+				selectedIndex={selectedIndex}
+				tasksMap={tasksMap}
+				expandedGroups={effectiveExpandedGroups}
+				expandedTags={effectiveExpandedTags}
+				searchActive={searchMode}
 				searchQuery={searchQuery}
 			/>
 			<Box width={contentWidth} flexDirection="column" flexShrink={0}>
