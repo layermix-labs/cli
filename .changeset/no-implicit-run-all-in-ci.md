@@ -1,8 +1,8 @@
 ---
-"@layermix/cli": major
+"@layermix/cli": minor
 ---
 
-breaking(cli): remove the implicit "run everything" fallback in CI/AI mode
+change(cli): remove the implicit "run everything" fallback in CI/AI mode
 
 Bare `layermix --ci` (or `--ai`, or any CI-detected invocation) with no explicit target no longer runs every task. It now prints the same `No tasks specified…` hint the piped non-CI path does and exits 0. `layermix --ai` in an unfamiliar repo shouldn't silently execute the whole pipeline.
 
