@@ -17,12 +17,18 @@ const PADDING = 1;
 const Overview: React.FC<OverviewProps> = ({ tasks, width, title, footer }) => {
 	const [now, setNow] = React.useState(Date.now());
 
-	React.useEffect(() => {
-		const timer = setInterval(() => setNow(Date.now()), 100); // 100ms for smoother updates
-		return () => clearInterval(timer);
-	}, []);
-
 	const taskList = Object.values(tasks);
+	// The waterfall + duration display only needs `now` to advance while at
+	// least one task is actually running. Idle/finished states are static, so
+	// gate the 100ms ticker on that — otherwise the whole pane re-renders 10×/s
+	// for nothing and any expensive useMemos below thrash on each tick.
+	const hasRunning = taskList.some((t) => t.status === "RUNNING");
+
+	React.useEffect(() => {
+		if (!hasRunning) return;
+		const timer = setInterval(() => setNow(Date.now()), 100);
+		return () => clearInterval(timer);
+	}, [hasRunning]);
 
 	// Calculate stats
 	const totalDuration = useMemo(() => {

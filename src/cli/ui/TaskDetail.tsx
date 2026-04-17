@@ -148,8 +148,8 @@ const LogPane: React.FC<LogPaneProps> = ({
 		overflow="hidden"
 	>
 		{visibleOutput.map((line, i) => (
-			// biome-ignore lint/suspicious/noArrayIndexKey: visibleOutput is a flat, position-indexed log window; the line at a given row IS its identity and the scrollTop prefix forces remount on scroll.
-			<Text key={`${scrollTop}-${i}`} wrap="truncate-end">
+			// biome-ignore lint/suspicious/noArrayIndexKey: key is the line's absolute index in the output buffer (scrollTop + i). Stable across scroll/tail so React updates the existing <Text> in place instead of unmount/remount on every chunk — that remounting was a major flicker source.
+			<Text key={scrollTop + i} wrap="truncate-end">
 				{line.length > 0 ? line : " "}
 			</Text>
 		))}
