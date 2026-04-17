@@ -3,7 +3,7 @@ import clipboardy from "clipboardy";
 import { Box, type Key, Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
-import Kbd from "./Kbd.js";
+import { FooterOptions, handleFooterNavInput } from "./FooterMenu.js";
 import { STATUS_COLOR, STATUS_LABEL } from "./status.js";
 import { useMouseWheel } from "./useMouseWheel.js";
 import useStdoutDimensions from "./useStdoutDimensions.js";
@@ -204,22 +204,11 @@ const DetailFooter: React.FC<FooterProps> = ({
 					Task Failed{"  "}
 				</Text>
 			)}
-			{options.map((opt, i) => {
-				const key = OPTION_KEYS[opt];
-				const isSelected = i === selectedOption;
-				return (
-					<Box key={opt} marginRight={i === options.length - 1 ? 0 : 3}>
-						{key ? <Kbd k={key} /> : null}
-						<Text
-							color={isSelected ? "black" : undefined}
-							backgroundColor={isSelected ? "cyan" : undefined}
-							bold={isSelected}
-						>
-							{key ? ` ${opt} ` : ` ${opt} `}
-						</Text>
-					</Box>
-				);
-			})}
+			<FooterOptions
+				options={options}
+				selectedOption={selectedOption}
+				optionKeys={OPTION_KEYS}
+			/>
 		</Box>
 		{message ? <Text color="green">{message}</Text> : null}
 	</Box>
@@ -384,6 +373,33 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		tryEdgeJump(input) ||
 		tryLineScroll(input, key);
 
+	// Direct single-key shortcuts — skip the menu entirely.
+	// `R` / `K` are Shift+r / Shift+k so they arrive as distinct characters.
+	const tryShortcut = (input: string): boolean => {
+		if (input === "r") {
+			if (isFailed) onRetry?.();
+			else onRun?.();
+			return true;
+		}
+		if (input === "R") {
+			onRunWithDeps?.();
+			return true;
+		}
+		if (input === "c") {
+			copyLogsToClipboard();
+			return true;
+		}
+		if (input === "K") {
+			onKill?.();
+			return true;
+		}
+		if (input === "x") {
+			onClose?.();
+			return true;
+		}
+		return false;
+	};
+
 	useInput((input, key) => {
 		if (tryHandleScroll(input, key)) return;
 
@@ -395,42 +411,16 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 		// Footer nav + activation are non-fullscreen only.
 		if (fullscreen) return;
 
-		// Direct single-key shortcuts — skip the menu entirely.
-		// `R` / `K` are Shift+r / Shift+k so they arrive as distinct characters.
-		if (input === "r") {
-			if (isFailed) onRetry?.();
-			else onRun?.();
-			return;
-		}
-		if (input === "R") {
-			onRunWithDeps?.();
-			return;
-		}
-		if (input === "c") {
-			copyLogsToClipboard();
-			return;
-		}
-		if (input === "K") {
-			onKill?.();
-			return;
-		}
-		if (input === "x") {
-			onClose?.();
-			return;
-		}
+		if (tryShortcut(input)) return;
 
-		// Arrow / h-l navigation between footer options; Enter activates.
-		if (key.leftArrow || input === "h") {
-			setSelectedOption((prev) => (prev > 0 ? prev - 1 : options.length - 1));
-			return;
-		}
-		if (key.rightArrow || input === "l") {
-			setSelectedOption((prev) => (prev < options.length - 1 ? prev + 1 : 0));
-			return;
-		}
-		if (key.return) {
-			activateChoice(options[selectedOption]);
-		}
+		handleFooterNavInput(
+			input,
+			key,
+			options,
+			selectedOption,
+			setSelectedOption,
+			activateChoice,
+		);
 	});
 
 	// Mouse wheel scrolling — 3 lines per tick (standard OS convention).

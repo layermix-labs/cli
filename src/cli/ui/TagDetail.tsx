@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
-import Kbd from "./Kbd.js";
+import { FooterOptions, handleFooterNavInput } from "./FooterMenu.js";
 import Overview from "./Overview.js";
 import type { TaskState } from "./useTaskState.js";
 
@@ -38,22 +38,11 @@ const TagFooter: React.FC<FooterProps> = ({ options, selectedOption }) => (
 		flexDirection="row"
 		flexShrink={0}
 	>
-		{options.map((opt, i) => {
-			const key = OPTION_KEYS[opt];
-			const isSelected = i === selectedOption;
-			return (
-				<Box key={opt} marginRight={i === options.length - 1 ? 0 : 3}>
-					{key ? <Kbd k={key} /> : null}
-					<Text
-						color={isSelected ? "black" : undefined}
-						backgroundColor={isSelected ? "cyan" : undefined}
-						bold={isSelected}
-					>
-						{` ${opt} `}
-					</Text>
-				</Box>
-			);
-		})}
+		<FooterOptions
+			options={options}
+			selectedOption={selectedOption}
+			optionKeys={OPTION_KEYS}
+		/>
 	</Box>
 );
 
@@ -100,18 +89,14 @@ const TagDetail: React.FC<TagDetailProps> = ({
 			onClose?.();
 			return;
 		}
-		// Footer menu navigation.
-		if (key.leftArrow || input === "h") {
-			setSelectedOption((prev) => (prev > 0 ? prev - 1 : options.length - 1));
-			return;
-		}
-		if (key.rightArrow || input === "l") {
-			setSelectedOption((prev) => (prev < options.length - 1 ? prev + 1 : 0));
-			return;
-		}
-		if (key.return) {
-			activate(options[selectedOption]);
-		}
+		handleFooterNavInput(
+			input,
+			key,
+			options,
+			selectedOption,
+			setSelectedOption,
+			activate,
+		);
 	});
 
 	const title = (
