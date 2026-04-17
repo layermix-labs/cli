@@ -28,7 +28,7 @@ layermix -t test                   # by tag
 layermix run build compile         # explicit form, multiple ids
 ```
 
-A bare `layermix` with no target opens an idle TUI in interactive shells, or prints a hint in linear mode. To auto-run everything, use `--ci`.
+A bare `layermix` with no target is a no-op in every mode — the TUI opens idle, and linear mode (CI/AI included) prints a hint and exits 0. Set [`defaultRun`](#defaultrun) in `task-runner.json` to give an empty invocation a target, or pass task ids / `-t <tag>` explicitly.
 
 ## Config (`task-runner.json`)
 
@@ -126,7 +126,7 @@ CLI-style fallback target used when no task ids or `-t <tag>` are passed in **no
 "defaultRun": "build deploy"   // multiple task ids
 ```
 
-The format mirrors what you'd type after `layermix`. Explicit user targets always win — `defaultRun` only fires when both the positional ids and `-t` are missing. In CI/AI mode, this also pre-empts the previous "run everything" fallback, so `--ci` with `defaultRun` set runs only the configured target.
+The format mirrors what you'd type after `layermix`. Explicit user targets always win — `defaultRun` only fires when both the positional ids and `-t` are missing. Without `defaultRun`, an empty invocation does nothing (prints a hint, exits 0) — including in CI/AI mode.
 
 ### Tags vs Groups
 
@@ -229,7 +229,7 @@ The retry helper also resets tasks downstream of a failure, so re-running isn't 
 
 CI mode is auto-detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or via the explicit `--ci` flag. AI-agent mode is detected from coding-agent env vars (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_AGENT`, `CURSOR_TRACE_ID`, `AIDER_MODEL`, `AIDER_CHAT_HISTORY_FILE`, `CONTINUE_SESSION_ID`) or the explicit `--ai` flag; the generic `AI_AGENT` env var is a manual opt-in for anything unlisted.
 
-In CI/AI mode, an empty target runs **all** tasks unless [`defaultRun`](#defaultrun) is set, in which case the configured target wins. In normal piped (non-CI, non-TTY) mode, an empty target prints a hint and exits 0 — unless `defaultRun` is set, which fires there too.
+An empty target never auto-runs everything — regardless of mode (TUI, piped shell, `--ci`, `--ai`, CI-detected). If [`defaultRun`](#defaultrun) is set, that target runs in every linear-mode shape (CI/AI, piped non-CI); otherwise a hint is printed and the process exits 0. The TUI ignores `defaultRun` on purpose and stays idle, so the explicit "pick what to run" UX is preserved.
 
 ---
 
@@ -263,7 +263,7 @@ Declare an [args-aware task](#task-arguments) — `cmd: "vitest run $1 -t $2"` w
 Set `defaultRun: "-t test"` (or any task id) at the top of `task-runner.json`. CI/AI invocations with no explicit target use it; explicit `layermix -t deploy` from the command line still wins.
 
 **"I'm running from Claude Code / Cursor."**
-Nothing to do — auto-detected via env vars. Output drops to linear, and an empty target auto-runs everything, so the agent sees a clean machine-readable stream without any flags.
+Nothing to do — auto-detected via env vars. Output drops to linear, so the agent sees a clean machine-readable stream without any flags. Unlike earlier versions, an empty target no longer auto-runs the whole pipeline — pass explicit task ids / `-t <tag>`, or configure [`defaultRun`](#defaultrun) so the agent has a target to hit.
 
 ---
 
@@ -284,7 +284,7 @@ layermix init [--force]                  # scaffold task-runner.json
 | `-a, --arg <value>` | positional value for the target task's `args[i]` (repeatable, in order). Comma-separated for multi-select file/folder args. Single-task targets only — see [Task arguments](#task-arguments) |
 | `--concurrency <n>` | cap parallelism (defaults to CPU count) |
 | `--output-only-failed` | linear mode: only print logs for failed tasks |
-| `--ci` | force linear mode, auto-run all tasks (or `defaultRun`) if no target |
+| `--ci` | force linear mode. With no explicit target, runs `defaultRun` if set; otherwise prints a hint and exits 0 |
 | `--ai` | alias for `--ci` |
 | `--junit <path>` | write a JUnit XML report on exit |
 | `--dry-run-json` | print the execution plan as JSON, run nothing |

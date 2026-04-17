@@ -182,20 +182,23 @@ async function runTui(
 }
 
 // Linear (non-TUI) path: wire console logging, honor the no-target hint when
-// not in CI mode, otherwise execute and bubble exit code. `tag` is passed
-// separately from `options` because `defaultRun` may have synthesized one.
+// no target was supplied and no `defaultRun` kicked in, otherwise execute and
+// bubble exit code. CI/AI mode no longer auto-runs every task on an empty
+// target — silent "run everything" was easy to trigger by accident (running
+// `layermix --ai` in an unfamiliar repo), so the hint now shows in every
+// linear-mode shape, CI included. `tag` is passed separately from `options`
+// because `defaultRun` may have synthesized one.
 async function runLinear(
 	executor: Executor,
 	config: ReturnType<ConfigLoader["load"]>,
 	options: { outputOnlyFailed?: boolean },
 	hasExplicitTarget: boolean,
-	ciMode: boolean,
 	targetIds: string[] | undefined,
 	tag: string | undefined,
 	flushJunit: () => void,
 ): Promise<void> {
 	wireLinearLogging(executor, config, options);
-	if (!hasExplicitTarget && !ciMode) {
+	if (!hasExplicitTarget) {
 		console.log(
 			chalk.yellow(
 				"No tasks specified. Pass task ids or -t <tag>, set `defaultRun` in task-runner.json, or run `layermix list` to see available tasks.",
@@ -429,7 +432,7 @@ program
 	.option("--output-only-failed", "Only show output for failed tasks")
 	.option(
 		"--ci",
-		"CI mode: disable TUI and run all tasks when no target specified (auto-detected from common CI env vars)",
+		"CI mode: disable TUI and force linear output (auto-detected from common CI env vars). With no explicit target, runs `defaultRun` if set; otherwise prints a hint and exits 0 — no implicit run-everything",
 	)
 	.option(
 		"--ai",
@@ -518,7 +521,6 @@ program
 				config,
 				options,
 				hasExplicitTarget,
-				ciMode,
 				targetIds,
 				tag,
 				flushJunit,
