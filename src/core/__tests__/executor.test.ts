@@ -153,15 +153,36 @@ describe('Executor', () => {
   it('should only run requested tasks and dependencies', async () => {
       const executor = new Executor(graph);
       // Run task-b. Should run task-a and task-b. Should NOT run task-c or task-d.
-      
+
       await executor.execute(['task-b']);
-      
+
       expect(execa).toHaveBeenCalledTimes(2); // A and B
-      
+
       const calls = (execa as any).mock.calls.map((c: any[]) => c[0]);
       expect(calls).toContain('echo A');
       expect(calls).toContain('echo B');
       expect(calls).not.toContain('echo C');
       expect(calls).not.toContain('echo D');
+  });
+
+  it('scheduleRun is additive: already-completed tasks are not re-run', async () => {
+      const executor = new Executor(graph);
+      const added: string[] = [];
+      executor.on('taskAdded', (id: string) => added.push(id));
+
+      // First wave: task-b (+ task-a).
+      await executor.execute(['task-b']);
+      expect(added).toEqual(expect.arrayContaining(['task-a', 'task-b']));
+      const callCountAfterFirst = (execa as any).mock.calls.length;
+
+      // Second wave: task-d (+ task-b, task-c, task-a). a+b already succeeded, only c+d should fire.
+      await executor.execute(['task-d']);
+
+      const newCalls = (execa as any).mock.calls
+        .slice(callCountAfterFirst)
+        .map((c: any[]) => c[0]);
+      expect(newCalls).toEqual(expect.arrayContaining(['echo C', 'echo D']));
+      expect(newCalls).not.toContain('echo A');
+      expect(newCalls).not.toContain('echo B');
   });
 });

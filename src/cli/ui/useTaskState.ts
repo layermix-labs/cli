@@ -11,16 +11,23 @@ export interface TaskState {
   duration?: number;
 }
 
-export const useTaskExecutor = (executor: Executor, initialTasks: string[]) => {
+export const useTaskExecutor = (executor: Executor, knownTaskIds: string[]) => {
   const [tasks, setTasks] = useState<Record<string, TaskState>>(() => {
     const initial: Record<string, TaskState> = {};
-    initialTasks.forEach(id => {
+    knownTaskIds.forEach(id => {
       initial[id] = { id, status: 'IDLE', output: [] };
     });
     return initial;
   });
 
   useEffect(() => {
+    const handleAdded = (taskId: string) => {
+      setTasks(prev => {
+        if (prev[taskId]) return prev;
+        return { ...prev, [taskId]: { id: taskId, status: 'IDLE', output: [] } };
+      });
+    };
+
     const handleStart = (taskId: string) => {
       setTasks(prev => ({
         ...prev,
@@ -100,6 +107,7 @@ export const useTaskExecutor = (executor: Executor, initialTasks: string[]) => {
       });
     };
     
+    executor.on('taskAdded', handleAdded);
     executor.on('taskStart', handleStart);
     executor.on('taskSuccess', handleSuccess);
     executor.on('taskFail', handleFail);
@@ -108,6 +116,7 @@ export const useTaskExecutor = (executor: Executor, initialTasks: string[]) => {
     executor.on('taskOutput', handleOutput);
 
     return () => {
+      executor.off('taskAdded', handleAdded);
       executor.off('taskStart', handleStart);
       executor.off('taskSuccess', handleSuccess);
       executor.off('taskFail', handleFail);

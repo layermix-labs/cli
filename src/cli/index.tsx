@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Command } from 'commander';
 import fs from 'fs';
 import path from 'path';
@@ -173,9 +174,9 @@ program
       const useTui = process.stdout.isTTY && options.tui !== false && !ciMode;
 
       if (useTui) {
-        const tasksToRun = Array.from(executor.identifyTasks(taskIds.length ? taskIds : undefined, options.tag));
+        const allTasks = Object.values(config.tasks);
         enterAltScreen();
-        const app = render(<App executor={executor} initialTaskIds={tasksToRun} />, { patchConsole: false });
+        const app = render(<App executor={executor} allTasks={allTasks} />, { patchConsole: false });
 
         executor.execute(taskIds.length ? taskIds : undefined, options.tag);
 
@@ -217,7 +218,7 @@ program
 
         const skippedIds: string[] = [];
         executor.on('taskSkipped', (taskId) => {
-            console.log(chalk.yellow(`[${taskId}] Skipped (Dependency failed)`));
+            console.log(chalk.gray(`[${taskId}] Not Started (dependency failed)`));
             skippedIds.push(taskId);
         });
 

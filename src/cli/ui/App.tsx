@@ -1,10 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { Executor } from '../../core/executor.js';
+import { Task } from '../../types/config.js';
 import { useTaskExecutor } from './useTaskState.js';
 import useStdoutDimensions from './useStdoutDimensions.js';
 import TaskList from './TaskList.js';
 import TaskDetail from './TaskDetail.js';
+import TagList from './TagList.js';
+import TagDetail from './TagDetail.js';
 import Overview from './Overview.js';
 
 const SIDEBAR_WIDTH = 30;
@@ -12,82 +15,121 @@ const SIDEBAR_GAP = 1;
 
 interface AppProps {
   executor: Executor;
-  initialTaskIds: string[];
+  allTasks: Task[];
 }
 
-const App: React.FC<AppProps> = ({ executor, initialTaskIds }) => {
+type NavItem =
+  | { kind: 'overview' }
+  | { kind: 'task'; id: string }
+  | { kind: 'tag'; name: string };
+
+const App: React.FC<AppProps> = ({ executor, allTasks }) => {
   const { exit } = useApp();
-  const tasksMap = useTaskExecutor(executor, initialTaskIds);
+
+  const allTaskIds = useMemo(() => allTasks.map(t => t.id), [allTasks]);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    allTasks.forEach(t => t.tags.forEach(tag => set.add(tag)));
+    return Array.from(set).sort();
+  }, [allTasks]);
+
+  const tasksMap = useTaskExecutor(executor, allTaskIds);
   const [columns, rows] = useStdoutDimensions();
   const contentWidth = Math.max(20, columns - SIDEBAR_WIDTH - SIDEBAR_GAP);
-  
-  // List of all items in navigation: 'overview' + task IDs
-  // We might want to sort tasks or keep them in execution order
-  // For now, let's just use initialTaskIds as the order
-  const navItems = useMemo(() => ['overview', ...initialTaskIds], [initialTaskIds]);
-  
+
+  const navItems = useMemo<NavItem[]>(() => [
+    { kind: 'overview' },
+    ...allTaskIds.map<NavItem>(id => ({ kind: 'task', id })),
+    ...allTags.map<NavItem>(name => ({ kind: 'tag', name })),
+  ], [allTaskIds, allTags]);
+
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Convert map to array for TaskList
-  const tasksList = useMemo(() => initialTaskIds.map(id => tasksMap[id]), [initialTaskIds, tasksMap]);
+  const tasksList = useMemo(
+    () => allTaskIds.map(id => tasksMap[id] ?? { id, status: 'IDLE' as const, output: [] }),
+    [allTaskIds, tasksMap],
+  );
+
+  const selected = navItems[selectedIndex] ?? navItems[0];
+
+  const tasksByTag = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    allTasks.forEach(t => {
+      t.tags.forEach(tag => {
+        (map[tag] = map[tag] || []).push(t.id);
+      });
+    });
+    return map;
+  }, [allTasks]);
 
   useInput((input, key) => {
     if (key.escape || (input === 'c' && key.ctrl)) {
-      // We should probably stop the executor?
-      // For now just exit UI.
       exit();
       process.exit(0);
     }
 
-    if (key.upArrow) {
+    if (key.upArrow || input === 'k') {
       setSelectedIndex(prev => (prev > 0 ? prev - 1 : navItems.length - 1));
+      return;
     }
 
-    if (key.downArrow) {
+    if (key.downArrow || input === 'j') {
       setSelectedIndex(prev => (prev < navItems.length - 1 ? prev + 1 : 0));
+      return;
+    }
+
+    if (key.return) {
+      // Tag pane handles its own Enter here; task pane's TaskDetail has its own menu.
+      if (selected.kind === 'tag') {
+        executor.scheduleRun(undefined, selected.name);
+      }
     }
   });
 
-  const selectedItem = navItems[selectedIndex];
-
-  // Determine if all finished to show "Done" message or exit automatically?
-  // Requirements don't specify auto-exit on success, usually runners stay open or exit.
-  // Standard CLI runners exit when done.
-  // We can listen to executor "end" event if we had one?
-  // Executor execute() returns a promise. We can handle that in index.ts and unmount App.
+  const selectedTaskId = selected.kind === 'task' ? selected.id : '';
+  const selectedTag = selected.kind === 'tag' ? selected.name : '';
 
   return (
     <Box flexDirection="column" width={columns} height={rows}>
       <Box borderStyle="single" borderColor="blue" paddingX={1} width={columns} flexShrink={0}>
         <Text bold>My-Runner TUI</Text>
         <Text> | </Text>
-        <Text>Nav: Arrows | Quit: Ctrl+C</Text>
+        <Text>Nav: Arrows/hjkl | Run: Enter | Quit: Ctrl+C</Text>
       </Box>
 
       <Box flexDirection="row" flexGrow={1}>
-        {/* Sidebar / Tabs */}
+        {/* Sidebar */}
         <Box flexDirection="column" marginRight={SIDEBAR_GAP} width={SIDEBAR_WIDTH} flexShrink={0}>
-             {/* We manually render the "Overview" item in the list style */}
-             <Box borderStyle="single" borderColor="gray" marginBottom={0} width={SIDEBAR_WIDTH}>
-                 <Text color={selectedItem === 'overview' ? 'cyan' : undefined} bold={selectedItem === 'overview'}>
-                    {selectedItem === 'overview' ? '> ' : '  '}Overview
-                 </Text>
-             </Box>
-             <TaskList tasks={tasksList} selectedTaskId={selectedItem === 'overview' ? '' : selectedItem} width={SIDEBAR_WIDTH} />
+          <Box borderStyle="single" borderColor="gray" marginBottom={0} width={SIDEBAR_WIDTH}>
+            <Text color={selected.kind === 'overview' ? 'cyan' : undefined} bold={selected.kind === 'overview'}>
+              {selected.kind === 'overview' ? '> ' : '  '}Overview
+            </Text>
+          </Box>
+          <TaskList tasks={tasksList} selectedTaskId={selectedTaskId} width={SIDEBAR_WIDTH} />
+          <TagList tags={allTags} selectedTag={selectedTag} width={SIDEBAR_WIDTH} />
         </Box>
 
-        {/* Content Area */}
+        {/* Content */}
         <Box width={contentWidth} flexDirection="column" flexShrink={0}>
-            {selectedItem === 'overview' ? (
-                <Overview tasks={tasksMap} width={contentWidth} />
-            ) : (
-                <TaskDetail
-                    task={tasksMap[selectedItem]}
-                    width={contentWidth}
-                    onRetry={() => executor.retry(selectedItem)}
-                    onClose={() => setSelectedIndex(0)}
-                />
-            )}
+          {selected.kind === 'overview' && <Overview tasks={tasksMap} width={contentWidth} />}
+          {selected.kind === 'task' && (
+            <TaskDetail
+              task={tasksMap[selected.id] ?? { id: selected.id, status: 'IDLE', output: [] }}
+              width={contentWidth}
+              onRun={() => executor.scheduleRun([selected.id])}
+              onRetry={() => executor.retry(selected.id)}
+              onClose={() => setSelectedIndex(0)}
+            />
+          )}
+          {selected.kind === 'tag' && (
+            <TagDetail
+              tag={selected.name}
+              taskIds={tasksByTag[selected.name] ?? []}
+              tasks={tasksMap}
+              width={contentWidth}
+            />
+          )}
         </Box>
       </Box>
     </Box>

@@ -127,8 +127,8 @@ const Overview: React.FC<OverviewProps> = ({ tasks, width }) => {
             <Text color="green">Success: {stats.success} </Text>
             <Text color="red">Failed: {stats.failure} </Text>
             <Text color="blue">Running: {stats.running} </Text>
-            <Text color="yellow">Skipped: {stats.skipped}</Text>
-            <Text dimColor> Pending: {stats.pending}</Text>
+            <Text color="gray">Not Started: {stats.skipped} </Text>
+            <Text color="yellow">Waiting: {stats.pending}</Text>
           </Box>
           {bottleneck && bottleneck.duration && (
               <Text>Bottleneck: {bottleneck.id} ({(bottleneck.duration/1000).toFixed(1)}s)</Text>

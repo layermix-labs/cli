@@ -77,7 +77,7 @@ describe('CLI e2e', () => {
     const res = await runCli(['run', '--no-tui'], failing);
     expect(res.exitCode).toBe(1);
     expect(res.stdout).toContain('[bad] Failed');
-    expect(res.stdout).toContain('[downstream] Skipped');
+    expect(res.stdout).toContain('[downstream] Not Started');
   });
 
   it('run with CI=true emits structured JSON report', async () => {

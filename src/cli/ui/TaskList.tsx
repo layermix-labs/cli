@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { TaskState } from './useTaskState.js';
+import { STATUS_COLOR, STATUS_ICON } from './status.js';
 
 interface TaskListProps {
   tasks: TaskState[];
@@ -17,32 +18,8 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, selectedTaskId, width = 30 }
         </Box>
       {tasks.map(task => {
         const isSelected = task.id === selectedTaskId;
-        let color = 'white';
-        let icon = ' ';
-
-        switch (task.status) {
-          case 'SUCCESS':
-            color = 'green';
-            icon = '✓';
-            break;
-          case 'FAILURE':
-            color = 'red';
-            icon = '✗';
-            break;
-          case 'RUNNING':
-            color = 'blue';
-            icon = '•'; // Spinner handled below
-            break;
-          case 'QUEUED':
-          case 'IDLE':
-            color = 'yellow';
-            icon = '○';
-            break;
-          case 'SKIPPED':
-            color = 'gray';
-            icon = '-';
-            break;
-        }
+        const color = STATUS_COLOR[task.status];
+        const icon = STATUS_ICON[task.status];
 
         return (
           <Box key={task.id}>

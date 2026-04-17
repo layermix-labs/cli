@@ -1,0 +1,65 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+`my-runner` — DAG-based task runner CLI. TypeScript + Node (ESM, `NodeNext`). Configured via `task-runner.json` (zod-validated). Runs via Ink TUI in a TTY, linear buffered output otherwise. Project is scaffolded per `INSTRUCTIONS-1.md` → `INSTRUCTIONS-5.md` (treat those as spec).
+
+## Commands
+
+Package manager: **pnpm**. Entry runs via `vite-node` (no prebuild).
+
+- Install: `pnpm install`
+- Run CLI: `npm start -- [args]` (e.g. `npm start`, `npm start -- build --no-tui`, `npm start -- -t test --dry-run-json`, `npm start -- list`, `npm start -- init`). `run` is the default subcommand, so the `run` keyword can be omitted.
+- Tests (all): `npm test` — includes unit tests in `src/core/__tests__/` and E2E in `test/e2e.test.ts`.
+- Tests (single file): `npx vitest run src/core/__tests__/task-graph.test.ts`
+- Tests (one test name): `npx vitest run -t "cycle detection"`
+- Generate JSON schema: `npm run generate-schema` (writes `schema.json` at repo root). Zod v4 is used — the script calls `z.toJSONSchema(ConfigSchema)` natively; the old `zod-to-json-schema` package emits empty schemas against v4, don't revert to it.
+
+No `build`, `lint`, or `typecheck` script in `package.json`. `tsc` only via the sample `task-runner.json` tasks — not for compiling the CLI itself. `dist/` in git is stale output, not the runtime path.
+
+CLI subcommands (see `src/cli/index.tsx`): `list`, `validate`, `init`, `run [taskIds...]` (default — `my-runner [args]` is the same as `my-runner run [args]`). `run` flags: `-t <tag>`, `--dry-run-json`, `--concurrency <n>`, `--output-only-failed`, `--no-tui`, `--ci`. `init` also accepts `--force` to overwrite an existing `task-runner.json`. The previous `interactive` (checkbox selection) command was removed; there is no checkbox UI anymore — pass task ids or `-t <tag>` directly.
+
+## Architecture
+
+Layers, outside-in:
+
+1. **Config** (`src/types/config.ts`, `src/core/config-loader.ts`)
+   - `ConfigSchema` (zod) → `Task { id, cmd, dependsOn, tags, cwd?, env? }`. Note `z.object({}).catchall(z.string())` used instead of `z.record` — known zod 4.3.5 workaround, keep it.
+   - `ConfigLoader` uses `cosmiconfig` but **walks upward through parent dirs itself**, collecting every matching config, then `mergeConfigs` applies closer-wins for tasks/env (monorepo semantics). Don't replace with plain `cosmiconfig.search()` — that only finds the nearest one.
+   - `NormalizedConfig.tasks` is always a `Record<string, Task>` keyed by id; `normalize()` accepts array or object form.
+
+2. **Graph** (`src/core/task-graph.ts`)
+   - Edge direction: `dependency -> task`. Means `graph.adjacent(x)` returns *dependents* of `x`, and nodes with no incoming edges are ready-to-run. Keep this convention — `getAllDependents` and `getExecutionLayers` both rely on it.
+   - Validation in constructor: missing dep → throw, cycle (`hasCycle`) → throw.
+   - `getAllDependencies` / `getAllDependents` are recursive transitive closures used by `Executor.identifyTasks` (upstream closure) and `Executor.retry` (downstream reset).
+
+3. **Runner** (`src/core/task-runner.ts`)
+   - Wraps one `execa` child (`shell: true`, per-task `cwd`, merged env). Buffers stdout/stderr separately into string arrays, emits `output` events per chunk, tracks `IDLE | QUEUED | RUNNING | SUCCESS | FAILURE | SKIPPED` plus start/end timestamps. `reset()` kills the process if still alive — safe to call on retry.
+
+4. **Executor** (`src/core/executor.ts`) — `EventEmitter`
+   - **Events** (the API the UI and linear output both consume): `taskAdded(id)`, `taskStart(id)`, `taskSuccess(id, output)`, `taskFail(id, err, output)`, `taskSkipped(id)`, `taskOutput(id, data)`, `taskReset(id)`, `retry(id)`. Any new UI surface should subscribe here, not poke `TaskRunner` directly.
+   - `identifyTasks(ids?, tag?)` computes the transitive upstream closure — used by the scheduler to add tasks + their deps.
+   - **Scheduling is additive.** `scheduleRun(ids?, tag?)` is the primary entry: it creates missing `TaskRunner`s (emitting `taskAdded`), resets failed/skipped tasks, pushes into `pending`, and starts `processQueue()`. It does **not** wipe existing state — already-`completed`/`running` tasks stay untouched, so the TUI can call it repeatedly as the user presses Enter on tags/tasks. `execute()` is a thin wrapper that calls `scheduleRun` then awaits the current `processQueuePromise` — use it when you need a boolean success result; use `scheduleRun` when you just want to enqueue more work.
+   - `processQueue()` is a single re-entrant loop: scan `pending` → mark `anyDepFailed` as skipped (cascading) → schedule ready tasks up to `concurrency` (default = `os.cpus().length`) → `Promise.race` running set → repeat. `retry(id)` resets a task + all downstream dependents (via `getAllDependents`), re-adds them to `pending`, then calls `processQueue()` again. The `isProcessing` / `processQueuePromise` guard prevents two loops running in parallel when retry/scheduleRun fires while draining.
+   - `getDryRunJson` builds execution layers *over the target subset only*, independent of `TaskGraph.getExecutionLayers` (which operates on the whole graph). Don't unify them unless you also fix the subset-filtering semantics. The payload also includes resolved `cwd` (absolute), merged `env` (global + task-local, no `process.env`), and the full transitive `dependencies` closure per task — this is the AI-friendly contract, keep it stable.
+   - CLI linear mode accumulates `failures` + `skipped` into a report object; when the `is-ci` package detects a CI environment (checks `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or `--ci` is set, it prints the JSON between `---BEGIN MY-RUNNER-REPORT---` / `---END MY-RUNNER-REPORT---` markers **and** forces linear mode (TUI is suppressed even on a TTY). Exit is still 1 on failure — the markers are additive, not a replacement. `useTui = isTTY && !--no-tui && !ciMode`.
+
+5. **CLI + TUI** (`src/cli/index.tsx`, `src/cli/ui/*`)
+   - TTY detection in `run`: `process.stdout.isTTY && options.tui !== false` → Ink; else linear buffered mode. Linear mode subscribes to the same executor events and prints per-task after completion — that's how "output stays ordered" despite parallel execution.
+   - Ink tree: `App.tsx` owns nav state. The sidebar is three stacked sections: **Overview** row → `TaskList` (every task in the config, not just the initial target set) → `TagList` (unique tags). Up/Down cycles through all of them. Pressing **Enter** on a task calls `executor.scheduleRun([id])`; on a tag calls `executor.scheduleRun(undefined, name)`. Content area switches between `Overview`, `TaskDetail`, and `TagDetail` based on the selection `kind`.
+   - `useTaskExecutor` (`src/cli/ui/useTaskState.ts`) is the **single bridge** from executor events → React state. All per-task status, timing, and output lines live in this hook's `tasks` record — nothing else should subscribe to executor events from inside components. The hook listens to `taskAdded` so tasks added mid-session (via `scheduleRun` of a previously-unscheduled id) appear in state without re-mounting.
+   - `App.tsx` currently calls `process.exit(0)` after `waitUntilExit()` — be careful adding post-run logic there; the process dies immediately.
+
+6. **Schema gen** (`scripts/generate-schema.ts`) — calls `z.toJSONSchema(ConfigSchema)` (zod v4 native) and writes `schema.json`. `init` copies `schema.json` from repo root into the user's cwd if absent, then scaffolds a `task-runner.json` with `"$schema": "./schema.json"`. `ConfigSchema` now declares `$schema` as a known optional field so validation doesn't strip it and the JSON Schema's `additionalProperties: false` doesn't reject it.
+
+7. **E2E tests** (`test/e2e.test.ts`, fixtures in `test/fixtures/*/task-runner.json`) spawn the CLI via `node <local-vite-node>/dist/cli.mjs --root <repo> src/cli/index.tsx ...`. The `--root` flag is **required** — without it Vite uses the fixture directory as its root and fails to resolve `react/jsx-dev-runtime`. Don't switch to `npx vite-node` — it installs a fresh rolldown binary that's broken on macOS arm64.
+
+## Gotchas
+
+- ESM only. Relative imports in `src/**` **must** include `.js` extension (`NodeNext` resolution) even though the source is `.ts`/`.tsx` — this is already the pattern throughout, keep it when adding files.
+- Tests mock `execa` directly (see `src/core/__tests__/executor.test.ts`) — when adding executor tests, mirror that mock shape (promise with `.stdout` / `.stderr` objects carrying `on`) or tests will hang on stream listeners.
+- `dist/` is committed but stale; runtime is `vite-node` on `src/`. Don't edit `dist/` files — regenerate if actually needed.
+- `GEMINI.md` exists with partial/older notes; this file supersedes it for Claude.
+- Zod 4.3.5 `z.record` bug — use `z.object({}).catchall(...)`. Don't "fix" it without verifying the zod version.

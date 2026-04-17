@@ -56,31 +56,47 @@ export class Executor extends EventEmitter {
         return true;
     }
 
-    const tasksToRun = this.identifyTasks(targetTaskIds, tag);
-    
-    // Initialize/Reset state
-    this.pending = new Set(tasksToRun);
-    this.completed.clear();
-    this.failed.clear();
-    this.skipped.clear();
-    this.running.clear();
-    this.taskRunners.clear();
+    this.scheduleRun(targetTaskIds, tag);
+    if (this.processQueuePromise) {
+      await this.processQueuePromise;
+    }
+    return this.failed.size === 0;
+  }
 
-    // Initialize runners
-    for (const taskId of tasksToRun) {
-      const task = this.graph.getTask(taskId);
-      if (task) {
+  /**
+   * Schedules a set of tasks (and their upstream deps) into the running queue
+   * without wiping existing state. Safe to call repeatedly from the TUI as
+   * the user triggers tags / tasks interactively. Already-running or
+   * already-succeeded tasks are left alone; failed/skipped ones are reset.
+   */
+  scheduleRun(targetTaskIds?: string[], tag?: string): void {
+    const tasksToRun = this.identifyTasks(targetTaskIds, tag);
+    let added = false;
+
+    for (const id of tasksToRun) {
+      if (!this.taskRunners.has(id)) {
+        const task = this.graph.getTask(id);
+        if (!task) continue;
         const runner = new TaskRunner(task);
-        runner.on('output', (data) => {
-            this.emit('taskOutput', taskId, data);
-        });
-        this.taskRunners.set(taskId, runner);
+        runner.on('output', (data) => this.emit('taskOutput', id, data));
+        this.taskRunners.set(id, runner);
+        this.emit('taskAdded', id);
       }
+
+      if (this.running.has(id) || this.completed.has(id) || this.pending.has(id)) continue;
+
+      const runner = this.taskRunners.get(id)!;
+      if (this.failed.has(id) || this.skipped.has(id)) {
+        runner.reset();
+        this.failed.delete(id);
+        this.skipped.delete(id);
+        this.emit('taskReset', id);
+      }
+      this.pending.add(id);
+      added = true;
     }
 
-    await this.processQueue();
-    
-    return this.failed.size === 0;
+    if (added) this.processQueue();
   }
 
   /**

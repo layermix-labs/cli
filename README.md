@@ -1,0 +1,158 @@
+# my-runner
+
+DAG-based task runner CLI. Define tasks + dependencies in a JSON config, run them in parallel up to their dependency constraints, watch the graph stream in a TUI or get linear output for CI.
+
+---
+
+## For Humans
+
+### Install
+
+```sh
+pnpm install
+```
+
+Entry is `npm start` (runs the source via `vite-node` — no prebuild).
+
+### Quick start
+
+```sh
+# scaffold a task-runner.json + schema.json in the current dir
+npm start -- init
+
+# list tasks in the nearest config
+npm start -- list
+
+# validate DAG (cycles, missing deps) and print execution layers
+npm start -- validate
+
+# run tasks (and their dependencies) — `run` is the default command, can be omitted
+npm start -- build                     # by id
+npm start -- -t test                   # by tag
+npm start                              # everything
+npm start -- run build                 # explicit form also works
+
+# CI / non-TTY
+npm start -- --no-tui --output-only-failed
+npm start -- --ci                      # forces non-TTY + emits structured JSON report
+CI=true npm start                      # auto-detected via is-ci; same effect as --ci
+```
+
+CI mode is detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or the explicit `--ci` flag. Either one forces linear output (no TUI even on a TTY) and appends the JSON report block documented in the AI Agents section.
+
+### Config (`task-runner.json`)
+
+```json
+{
+  "$schema": "./schema.json",
+  "tasks": [
+    { "id": "clean",   "cmd": "rm -rf dist",         "dependsOn": [],                "tags": ["build"] },
+    { "id": "compile", "cmd": "tsc",                 "dependsOn": ["clean"],         "tags": ["build"] },
+    { "id": "lint",    "cmd": "eslint .",            "dependsOn": [],                "tags": ["test"] },
+    { "id": "test",    "cmd": "vitest run",          "dependsOn": ["compile","lint"],"tags": ["test"] }
+  ],
+  "env": { "NODE_ENV": "development" }
+}
+```
+
+- `cwd` / `env` per task are optional. Task `env` merges on top of global `env`.
+- Configs are discovered via `cosmiconfig` and **merged upward** through parent directories: a nearer config overrides tasks of the same id in an outer config (useful in monorepos).
+- `$schema: "./schema.json"` enables IDE autocompletion. Regenerate with `npx vite-node scripts/generate-schema.ts`.
+
+### TUI
+
+When stdout is a TTY, `run` launches an Ink TUI:
+
+- sidebar lists every task (green/red/blue-spinner/yellow)
+- **Overview** tab — live Gantt waterfall + success/fail counts + bottleneck
+- per-task tab — live-streamed stdout/stderr
+- on a failed task: **Retry / Copy Logs / Close** menu (retry resets that task *and* all its downstream dependents)
+
+Quit with `Ctrl+C` or `Esc`.
+
+### Linear mode
+
+`--no-tui`, or any non-TTY stdout: output is **buffered per task** and flushed only after a task finishes — so parallel execution doesn't garble logs. Task headers (`[task] Starting...` / `Finished (Success)` / `Failed` / `Skipped`) mark ordering.
+
+### Tests
+
+```sh
+npm test                                              # all
+npx vitest run src/core/__tests__/task-graph.test.ts  # one file
+npx vitest run -t "cycle detection"                   # one test name
+```
+
+---
+
+## For AI Agents
+
+### Discover the plan without running it
+
+```sh
+npm start -- run --dry-run-json [taskIds...] [-t <tag>]
+```
+
+Output shape:
+
+```json
+{
+  "root": "/abs/path/to/config/root",
+  "executionPlan": [ ["a"], ["b","c"], ["d"] ],
+  "tasks": {
+    "a": {
+      "id": "a",
+      "cmd": "echo hi",
+      "cwd": "/abs/path",
+      "env": { "NODE_ENV": "development" },
+      "dependsOn": [],
+      "dependencies": [],
+      "tags": ["build"]
+    }
+  }
+}
+```
+
+- `executionPlan` — layered topological sort over the **target subset** (task ids or `-t` tag filter, plus transitive upstream deps). Each inner array can run in parallel; layer N waits on layer N-1.
+- `tasks[id].cwd` — absolute working directory the command will run in.
+- `tasks[id].env` — fully resolved env from config (global `env` merged with the task's own `env`; `process.env` is *not* included here but is inherited at run time).
+- `tasks[id].dependsOn` — direct deps as declared.
+- `tasks[id].dependencies` — full transitive closure of upstream deps.
+
+No processes are spawned during dry-run.
+
+### Parse run results
+
+In CI (auto-detected by [`is-ci`](https://www.npmjs.com/package/is-ci), or forced with `--ci`) the TUI is skipped and the process writes a structured report between fenced markers after the normal human output:
+
+```
+---BEGIN MY-RUNNER-REPORT---
+{
+  "status": "failure",
+  "failures": [
+    { "id": "bad", "message": "Command failed with exit code 1: exit 1", "output": "..." }
+  ],
+  "skipped": ["downstream"]
+}
+---END MY-RUNNER-REPORT---
+```
+
+Extract with a regex on the marker pair. `status` is `"success"` or `"failure"`. Exit code is `0` on success, `1` on any failure or skipped-due-to-failed-dep.
+
+### Config schema
+
+`schema.json` at the repo root is a JSON Schema (draft 2020-12) generated from the Zod definition in `src/types/config.ts`. Reference it from any config with `"$schema": "./schema.json"` for validation / autocompletion.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0    | All targeted tasks succeeded |
+| 1    | One or more tasks failed, or config/validation error |
+
+### Useful commands for introspection
+
+```sh
+npm start -- list                   # human-readable task dump
+npm start -- validate               # confirms DAG is cycle-free + prints layers
+npm start -- run --dry-run-json     # machine-readable plan (see above)
+```
