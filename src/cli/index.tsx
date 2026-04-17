@@ -195,7 +195,7 @@ const program = new Command();
 program
 	.name("layermix")
 	.description("A simple DAG-based task runner")
-	.version("1.0.0");
+	.version("2.1.0");
 
 program
 	.command("list")
@@ -295,16 +295,8 @@ program
 				process.exit(1);
 			}
 
-			const schemaTarget = path.join(cwd, "schema.json");
-			if (!fs.existsSync(schemaTarget)) {
-				const bundled = path.resolve(__dirname, "../../schema.json");
-				if (fs.existsSync(bundled)) {
-					fs.copyFileSync(bundled, schemaTarget);
-				}
-			}
-
 			const starter = {
-				$schema: "./schema.json",
+				$schema: "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
 				tasks: [
 					{ id: "hello", cmd: "echo hello", dependsOn: [], tags: ["example"] },
 					{

@@ -13,7 +13,7 @@ npx @layermix/cli init
 ## Quick start
 
 ```sh
-# scaffold a task-runner.json + schema.json in the current dir
+# scaffold a task-runner.json in the current dir
 layermix init
 
 # list tasks in the nearest config
@@ -34,7 +34,7 @@ A bare `layermix` with no target opens an idle TUI in interactive shells, or pri
 
 ```json
 {
-  "$schema": "./schema.json",
+  "$schema": "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
   "tasks": [
     { "id": "clean",   "cmd": "rm -rf dist",   "dependsOn": [],                  "group": "build" },
     { "id": "compile", "cmd": "tsc",           "dependsOn": ["clean"],           "group": "build" },
@@ -64,7 +64,7 @@ Top-level fields:
 - `tags` — optional `name → description` map. Annotates tag names shown in `list` output and in TUI headers. Tag membership still lives on each task via the task's `tags` array.
 - `groups` — same shape for group names.
 
-Configs are discovered via [`cosmiconfig`](https://github.com/cosmiconfig/cosmiconfig) and **merged upward** through parent directories: a nearer config overrides tasks of the same id in an outer config (useful in monorepos). `$schema: "./schema.json"` enables IDE autocompletion — the schema is shipped with the package; `layermix init` copies it into your project.
+Configs are discovered via [`cosmiconfig`](https://github.com/cosmiconfig/cosmiconfig) and **merged upward** through parent directories: a nearer config overrides tasks of the same id in an outer config (useful in monorepos). `$schema` enables IDE autocompletion — the schema is hosted on GitHub; `layermix init` scaffolds a config with the correct reference.
 
 ### Tags vs Groups
 
@@ -199,7 +199,7 @@ Nothing to do — auto-detected via env vars. Output drops to linear, and an emp
 layermix [run] [taskIds...] [options]   # run is the default subcommand
 layermix list                            # human-readable task dump
 layermix validate                        # confirms DAG is cycle-free + prints layers
-layermix init [--force]                  # scaffold task-runner.json + schema.json
+layermix init [--force]                  # scaffold task-runner.json
 ```
 
 `run` flags:

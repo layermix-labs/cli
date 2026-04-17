@@ -53,7 +53,7 @@ Layers, outside-in:
    - `useTaskExecutor` (`src/cli/ui/useTaskState.ts`) is the **single bridge** from executor events → React state. All per-task status, timing, and output lines live in this hook's `tasks` record — nothing else should subscribe to executor events from inside components. The hook listens to `taskAdded` so tasks added mid-session (via `scheduleRun` of a previously-unscheduled id) appear in state without re-mounting.
    - `App.tsx` currently calls `process.exit(0)` after `waitUntilExit()` — be careful adding post-run logic there; the process dies immediately.
 
-6. **Schema gen** (`scripts/generate-schema.ts`) — calls `z.toJSONSchema(ConfigSchema)` (zod v4 native) and writes `schema.json`. `init` copies `schema.json` from repo root into the user's cwd if absent, then scaffolds a `task-runner.json` with `"$schema": "./schema.json"`. `ConfigSchema` now declares `$schema` as a known optional field so validation doesn't strip it and the JSON Schema's `additionalProperties: false` doesn't reject it.
+6. **Schema gen** (`scripts/generate-schema.ts`) — calls `z.toJSONSchema(ConfigSchema)` (zod v4 native) and writes `schema.json`. `init` scaffolds a `task-runner.json` with `$schema` pointing to the versioned schema on Unpkg. `ConfigSchema` now declares `$schema` as a known optional field so validation doesn't strip it.
 
 7. **E2E tests** (`test/e2e.test.ts`, fixtures in `test/fixtures/*/task-runner.json`) spawn the CLI via `node <local-vite-node>/dist/cli.mjs --root <repo> src/cli/index.tsx ...`. The `--root` flag is **required** — without it Vite uses the fixture directory as its root and fails to resolve `react/jsx-dev-runtime`. Don't switch to `npx vite-node` — it installs a fresh rolldown binary that's broken on macOS arm64.
 

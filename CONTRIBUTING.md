@@ -24,7 +24,7 @@ pnpm start                              # bare invocation (idle TUI)
 pnpm start -- init                      # scaffold a config in cwd
 pnpm start -- list
 pnpm start -- validate
-pnpm start -- build                     # run a task by id
+pnpm start -- build                     # run a task by id (see task-runner.json)
 pnpm start -- -t test                   # run a tag (Layermix's own quality gates — see below)
 pnpm start -- run --dry-run-json        # the AI-agent contract
 ```
@@ -33,11 +33,13 @@ The `--` is needed because pnpm forwards everything after it to the underlying s
 
 ## Quality gates (dogfooded)
 
-Layermix runs its own checks via Layermix. The `task-runner.json` at the repo root defines a `test` tag that bundles:
+Every developer-facing workflow lives in [`task-runner.json`](./task-runner.json) — there are no `pnpm <task>` scripts to memorize. Run the TUI bare and Enter on what you want, or hit a task id directly from the command line.
 
-- `lint` — Biome
+The `test` tag bundles the gates CI runs:
+
+- `check` — Biome lint + format
 - `typecheck` — `tsgo` (Microsoft's native TS preview)
-- `fallow` — dead-code / dupe / health audit
+- `fallow` — dead-code / dupe / health
 - `test` — Vitest (unit + e2e)
 
 Run the full suite the same way CI does:
@@ -46,22 +48,26 @@ Run the full suite the same way CI does:
 pnpm start -- -t test
 ```
 
-You can also invoke individual gates directly:
+Common individual tasks (see `pnpm start -- list` for the full set):
 
 ```sh
-pnpm test                # vitest run
-pnpm check               # biome check (lint + format)
-pnpm check:fix           # auto-fix
-pnpm typecheck           # tsgo
-pnpm fallow              # dead code / dupes / health
+pnpm start -- check                # biome check (lint + format)
+pnpm start -- fix                  # biome check --write
+pnpm start -- typecheck            # tsgo
+pnpm start -- fallow               # dead code
+pnpm start -- audit                # full fallow audit (dead + dupes + health)
+pnpm start -- test                 # vitest run
 ```
 
-To run a single Vitest file or named test:
+Two args-aware tasks (TUI prompts for the file when you press Enter; pass `-a <path>` from the CLI):
 
 ```sh
-pnpm exec vitest run src/core/__tests__/task-graph.test.ts
-pnpm exec vitest run -t "cycle detection"
+pnpm start                         # then Enter on `test-file` or `fix-file`
+pnpm start -- test-file -a src/core/__tests__/task-graph.test.ts -a "cycle detection"
+pnpm start -- fix-file -a src/core/executor.ts
 ```
+
+The build chain (`clean` → `build`, plus `generate-schema`) is also in `task-runner.json`. `pnpm prepublishOnly` runs an inlined version of those steps directly so publishing never depends on Layermix being functional.
 
 ## Layout
 
@@ -91,13 +97,13 @@ The deeper architecture (event contracts, scheduling, gotchas) lives in [CLAUDE.
 ## Build
 
 ```sh
-pnpm build                  # tsc → dist/, then chmod +x the bin
-pnpm generate-schema        # regenerate schema.json from the zod source
+pnpm start -- build                # tsc → dist/, then chmod +x the bin (depends on `clean`)
+pnpm start -- generate-schema      # regenerate schema.json from the zod source
 ```
 
-`pnpm build` runs `tsc --noCheck` because typechecking is gated separately by `pnpm typecheck` (which uses `tsgo` for speed). Both must pass before publishing.
+`build` runs `tsc --noCheck` because typechecking is gated separately by `typecheck` (which uses `tsgo` for speed). Both must pass before publishing.
 
-`prepublishOnly` runs `generate-schema` + `build` automatically, so a clean `pnpm publish` always ships current dist + schema.
+`prepublishOnly` (still in `package.json` as an npm lifecycle hook) inlines `generate-schema + clean + build`, so a clean `pnpm publish` always ships current dist + schema without depending on Layermix being functional.
 
 ## Releasing
 
@@ -118,6 +124,18 @@ To do a one-off manual publish (only if the automation is broken):
 pnpm changeset version       # bumps version + CHANGELOG
 pnpm release                 # runs prepublishOnly then changeset publish
 ```
+
+### Version Synchronization
+
+The project uses hardcoded versioned schema URLs (via Unpkg) to ensure IDE autocompletion matches the installed package. When the version is bumped (manually or via a Changeset PR), you **must** sync the following locations to match the new `package.json` version:
+
+- **`src/cli/index.tsx`**: the `.version()` call.
+- **`src/cli/index.tsx`**: the `$schema` URL in the `init` command's starter config.
+- **`README.md`**: the `$schema` URL in the "Config" example.
+- **`task-runner.json`**: the repo's own `$schema` URL.
+- **`test/e2e.test.ts`**: the `$schema` expectation in the `init` test.
+
+Failing to sync these will cause the `init` command to scaffold configs pointing to a stale (or non-existent) schema version on Unpkg.
 
 ## Conventions
 

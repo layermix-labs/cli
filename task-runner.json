@@ -1,47 +1,94 @@
 {
-	"$schema": "./schema.json",
+	"$schema": "https://unpkg.com/@layermix/cli@2.1.0/schema.json",
 	"tasks": [
 		{
 			"id": "clean",
 			"cmd": "rm -rf dist",
 			"description": "Remove the dist/ output directory so the next build starts from a clean slate.",
-			"tags": ["build"],
 			"dependsOn": [],
 			"group": "build"
 		},
 		{
-			"id": "compile",
-			"cmd": "tsc",
-			"description": "Compile TypeScript sources to JavaScript using the project's tsconfig.",
+			"id": "build",
+			"cmd": "tsc --noCheck && chmod +x dist/cli/index.js",
+			"description": "Compile TypeScript to dist/ (skipping typecheck — that's a separate gate) and mark the bin executable.",
 			"dependsOn": ["clean"],
-			"tags": ["build"],
 			"group": "build"
 		},
 		{
-			"id": "lint",
-			"cmd": "biome check",
-			"description": "Run Biome linting and formatting checks across the repo.",
-			"tags": ["test"],
-			"dependsOn": []
+			"id": "generate-schema",
+			"cmd": "vite-node scripts/generate-schema.ts",
+			"description": "Regenerate schema.json from the zod ConfigSchema source of truth.",
+			"dependsOn": [],
+			"group": "build"
 		},
+
+		{
+			"id": "check",
+			"cmd": "biome check src scripts test",
+			"description": "Read-only Biome check (lint + format) across the repo.",
+			"dependsOn": [],
+			"tags": ["test"],
+			"group": "lint"
+		},
+		{
+			"id": "fix",
+			"cmd": "biome check --write src scripts test",
+			"description": "Auto-fix Biome lint and formatting issues across the repo.",
+			"dependsOn": [],
+			"group": "lint"
+		},
+		{
+			"id": "fix-file",
+			"cmd": "biome check --write $1",
+			"description": "Auto-fix Biome lint and formatting issues for a single source file.",
+			"dependsOn": [],
+			"group": "lint",
+			"args": [
+				{
+					"type": "file",
+					"label": "File to fix",
+					"glob": "{src,scripts,test}/**/*.{ts,tsx,json}"
+				}
+			]
+		},
+
 		{
 			"id": "typecheck",
 			"cmd": "tsgo --noEmit -p tsconfig.check.json",
-			"description": "Type-check the project with tsgo without emitting output.",
+			"description": "Type-check the project with tsgo (Microsoft's native TS preview) without emitting output.",
+			"dependsOn": [],
 			"tags": ["test"],
-			"dependsOn": []
+			"group": "typecheck"
 		},
+		{
+			"id": "typecheck:watch",
+			"cmd": "tsgo --noEmit -p tsconfig.check.json --watch",
+			"description": "Long-running tsgo watcher. Output streams into the log pane; kill with K to stop.",
+			"dependsOn": [],
+			"group": "typecheck"
+		},
+
 		{
 			"id": "fallow",
 			"cmd": "fallow",
-			"description": "Detect unused exports and dead code with fallow.",
+			"description": "Default fallow run — detect unused exports and dead code.",
+			"dependsOn": [],
 			"tags": ["test"],
-			"dependsOn": []
+			"group": "fallow"
 		},
+		{
+			"id": "audit",
+			"cmd": "fallow audit",
+			"description": "Full fallow audit (dead code + duplicates + dependency health).",
+			"dependsOn": [],
+			"group": "fallow"
+		},
+
 		{
 			"id": "test",
 			"cmd": "vitest run",
-			"description": "Run the full Vitest suite once (unit + E2E) in non-watch mode.",
+			"description": "Run the full Vitest suite once (unit + e2e) in non-watch mode.",
 			"dependsOn": [],
 			"tags": ["test"]
 		},
@@ -50,7 +97,6 @@
 			"cmd": "vitest run $1 -t $2",
 			"description": "Run a single Vitest file, optionally filtered by test-name pattern.",
 			"dependsOn": [],
-			"tags": ["test"],
 			"args": [
 				{
 					"type": "file",
@@ -63,42 +109,18 @@
 					"default": ""
 				}
 			]
-		},
-		{
-			"id": "fix-file",
-			"cmd": "biome check --write $1",
-			"description": "Auto-fix lint and formatting issues for a single source file.",
-			"dependsOn": [],
-			"tags": [],
-			"args": [
-				{
-					"type": "file",
-					"label": "File to fix",
-					"glob": "{src,scripts,test}/**/*.{ts,tsx,json}"
-				}
-			]
-		},
-		{
-			"id": "bundle",
-			"cmd": "esbuild src/index.ts --bundle --outfile=dist/bundle.js",
-			"description": "Bundle the compiled entry point into a single dist/bundle.js via esbuild.",
-			"dependsOn": ["compile"],
-			"tags": ["build"],
-			"group": "build"
-		},
-		{
-			"id": "fix",
-			"cmd": "biome check --write",
-			"description": "Auto-fix lint and formatting issues in place with Biome.",
-			"tags": [],
-			"dependsOn": []
 		}
 	],
 	"env": {
 		"NODE_ENV": "development"
 	},
 	"tags": {
-		"build": "Tasks that produce build artifacts (clean, compile, bundle).",
-		"test": "Quality gates run in CI: linting, type-checking, dead-code detection, and tests."
+		"test": "Quality gates run by CI: check, typecheck, fallow, test."
+	},
+	"groups": {
+		"build": "Build artifacts: clean dist, compile to JS + chmod the bin, regenerate schema.",
+		"lint": "Biome lint + format (read-only check, repo-wide fix, single-file fix).",
+		"typecheck": "tsgo type-checking (one-shot + watch mode).",
+		"fallow": "Dead-code, duplicates, and dependency-health audits."
 	}
 }
