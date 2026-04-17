@@ -1,169 +1,188 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"type": "object",
-	"properties": {
-		"$schema": {
-			"type": "string"
-		},
-		"tasks": {
-			"type": "array",
-			"items": {
-				"type": "object",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"cmd": {
-						"type": "string"
-					},
-					"description": {
-						"type": "string"
-					},
-					"dependsOn": {
-						"default": [],
-						"type": "array",
-						"items": {
-							"type": "string"
-						}
-					},
-					"tags": {
-						"default": [],
-						"type": "array",
-						"items": {
-							"type": "string"
-						}
-					},
-					"group": {
-						"type": "string"
-					},
-					"cwd": {
-						"type": "string"
-					},
-					"env": {
-						"type": "object",
-						"properties": {},
-						"additionalProperties": {
-							"type": "string"
-						}
-					},
-					"args": {
-						"type": "array",
-						"items": {
-							"oneOf": [
-								{
-									"type": "object",
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "text"
-										},
-										"label": {
-											"type": "string"
-										},
-										"default": {
-											"type": "string"
-										}
-									},
-									"required": ["type"],
-									"additionalProperties": false
-								},
-								{
-									"type": "object",
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "select"
-										},
-										"label": {
-											"type": "string"
-										},
-										"choices": {
-											"minItems": 1,
-											"type": "array",
-											"items": {
-												"type": "string"
-											}
-										},
-										"default": {
-											"type": "string"
-										}
-									},
-									"required": ["type", "choices"],
-									"additionalProperties": false
-								},
-								{
-									"type": "object",
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "file"
-										},
-										"label": {
-											"type": "string"
-										},
-										"glob": {
-											"type": "string"
-										},
-										"multiple": {
-											"type": "boolean"
-										}
-									},
-									"required": ["type"],
-									"additionalProperties": false
-								},
-								{
-									"type": "object",
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "folder"
-										},
-										"label": {
-											"type": "string"
-										},
-										"glob": {
-											"type": "string"
-										},
-										"multiple": {
-											"type": "boolean"
-										}
-									},
-									"required": ["type"],
-									"additionalProperties": false
-								}
-							]
-						}
-					}
-				},
-				"required": ["id", "cmd", "dependsOn", "tags"],
-				"additionalProperties": false
-			}
-		},
-		"env": {
-			"default": {},
-			"type": "object",
-			"properties": {},
-			"additionalProperties": {
-				"type": "string"
-			}
-		},
-		"tags": {
-			"default": {},
-			"type": "object",
-			"properties": {},
-			"additionalProperties": {
-				"type": "string"
-			}
-		},
-		"groups": {
-			"default": {},
-			"type": "object",
-			"properties": {},
-			"additionalProperties": {
-				"type": "string"
-			}
-		}
-	},
-	"required": ["tasks", "env", "tags", "groups"],
-	"additionalProperties": false
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "cmd": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dependsOn": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "env": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "text"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "select"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "choices": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "choices"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "file"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "glob": {
+                      "type": "string"
+                    },
+                    "multiple": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "folder"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "glob": {
+                      "type": "string"
+                    },
+                    "multiple": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "cmd",
+          "dependsOn",
+          "tags"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "env": {
+      "default": {},
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "default": {},
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "groups": {
+      "default": {},
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "tasks",
+    "env",
+    "tags",
+    "groups"
+  ],
+  "additionalProperties": false
 }
