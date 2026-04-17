@@ -140,11 +140,7 @@ const TagDetail: React.FC<TagDetailProps> = ({
 					({taskIds.length} task{taskIds.length === 1 ? "" : "s"})
 				</Text>
 			</Box>
-			{description ? (
-				<Text dimColor wrap="truncate-end">
-					{description}
-				</Text>
-			) : null}
+			{description ? <Text dimColor>{description}</Text> : null}
 		</Box>
 	);
 

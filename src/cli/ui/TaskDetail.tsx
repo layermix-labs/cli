@@ -149,11 +149,7 @@ const DetailHeader: React.FC<HeaderProps> = ({
 				{`$ ${cmd}`}
 			</Text>
 		) : null}
-		{description ? (
-			<Text bold wrap="truncate-end">
-				{description}
-			</Text>
-		) : null}
+		{description ? <Text bold>{description}</Text> : null}
 	</Box>
 );
 
@@ -299,13 +295,22 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 	// no outer frame, so only the top bar + its divider eat rows up top.
 	// Normal     = top bar (1) + top-bar divider (1) + header block (3)
 	//              + footer divider (1) + footer options (1) = 7
-	//   +1 row each for command line and description when present.
+	//   + N rows for the description (it's allowed to wrap to multiple
+	//     lines now — long task descriptions used to truncate, but the
+	//     full text is more useful than ellipsis), + 1 for the command.
 	// Fullscreen = top bar (1) + top-bar divider (1) + hint line (1) = 3
-	const descriptionRow = !fullscreen && description ? 1 : 0;
+	//
+	// Description wrap-width is approximated as `width - 2` (matching the
+	// outer paddingX={1} on each side). char-per-column assumption is fine
+	// for ASCII; off by at most a row for emoji-heavy descriptions.
+	const descriptionRows =
+		!fullscreen && description
+			? Math.max(1, Math.ceil(description.length / Math.max(1, width - 2)))
+			: 0;
 	const cmdRow = !fullscreen && cmd ? 1 : 0;
 	const availableHeight = fullscreen
 		? Math.max(5, rows - 3)
-		: Math.max(5, rows - 7 - descriptionRow - cmdRow);
+		: Math.max(5, rows - 7 - descriptionRows - cmdRow);
 
 	const totalLines = task.output.length;
 	const maxScroll = Math.max(0, totalLines - availableHeight);
