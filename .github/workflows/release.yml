@@ -32,6 +32,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify npm auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is empty or missing. Add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+          npm whoami || { echo "::error::Token is set but npm whoami failed — token is invalid, expired, or lacks access."; exit 1; }
+
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
