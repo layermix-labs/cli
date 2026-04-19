@@ -298,6 +298,21 @@ layermix init [--force]                  # scaffold task-runner.json
 
 ## For CI / AI agents
 
+### Agent skill template
+
+Projects that consume `@layermix/cli` can drop a pre-written skill file into their repo to teach Claude Code (and other skill-aware coding agents) how to use this tool correctly — which flags are safe, how to read `task-runner.json`, when to prefer `--dry-run-json`, how to interpret failures, etc.
+
+Grab it from [`agent-skill.md`](./agent-skill.md) in this repo and copy it into your project:
+
+```sh
+# Claude Code skill location
+mkdir -p .claude/skills/layermix
+curl -fsSL https://raw.githubusercontent.com/layermix-labs/cli/master/agent-skill.md \
+  -o .claude/skills/layermix/SKILL.md
+```
+
+The file is a self-contained Markdown doc with YAML frontmatter (`name` + `description`). Agents that follow the Claude Code skill convention will auto-load it when the user mentions building, testing, or running tasks in a repo that has a `task-runner.json`. For other tools, drop it wherever that tool expects agent context (e.g. `AGENTS.md`, `.cursor/rules/`, etc.) or just reference it from your `CLAUDE.md`.
+
 ### Dry-run plan
 
 ```sh
