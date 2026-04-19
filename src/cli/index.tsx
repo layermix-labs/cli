@@ -121,6 +121,34 @@ function setupJunitCollection(
 	};
 }
 
+// Hard-fails (via exitWithError) when the user targets a task id that isn't in
+// the config, or a tag no task carries. Silent no-op in these cases used to
+// exit 0, which was misleading in CI and hid typos. Called after `defaultRun`
+// resolution so configured defaults get the same validation as CLI targets.
+function validateExplicitTarget(
+	config: ReturnType<ConfigLoader["load"]>,
+	targetIds: string[] | undefined,
+	tag: string | undefined,
+): void {
+	if (targetIds) {
+		const unknown = targetIds.filter((id) => !config.tasks[id]);
+		if (unknown.length > 0) {
+			const label = unknown.length === 1 ? "Unknown task" : "Unknown tasks";
+			exitWithError(
+				new Error(`${label}: ${unknown.map((id) => `"${id}"`).join(", ")}`),
+			);
+		}
+	}
+	if (tag) {
+		const anyTagged = Object.values(config.tasks).some((t) =>
+			t.tags.includes(tag),
+		);
+		if (!anyTagged) {
+			exitWithError(new Error(`No tasks match tag "${tag}"`));
+		}
+	}
+}
+
 // Apply --arg values to the single target task. Throws (via exitWithError)
 // when the user passes --arg with a tag or multiple ids — there's no
 // unambiguous mapping from positional values to a target in that case.
@@ -183,11 +211,13 @@ async function runTui(
 
 // Linear (non-TUI) path: wire console logging, honor the no-target hint when
 // no target was supplied and no `defaultRun` kicked in, otherwise execute and
-// bubble exit code. CI/AI mode no longer auto-runs every task on an empty
-// target — silent "run everything" was easy to trigger by accident (running
-// `layermix --ai` in an unfamiliar repo), so the hint now shows in every
-// linear-mode shape, CI included. `tag` is passed separately from `options`
-// because `defaultRun` may have synthesized one.
+// bubble exit code. In CI/AI mode an empty target is a hard error (exit 1),
+// because a scheduled agent or CI job running `layermix --ai` with no
+// configured target has nothing useful to do and should signal that loudly
+// instead of exiting green. In piped non-CI mode the same case is a soft
+// hint + exit 0, since a human running `layermix | less` might just want the
+// reminder. `tag` is passed separately from `options` because `defaultRun`
+// may have synthesized one.
 async function runLinear(
 	executor: Executor,
 	config: ReturnType<ConfigLoader["load"]>,
@@ -195,15 +225,18 @@ async function runLinear(
 	hasExplicitTarget: boolean,
 	targetIds: string[] | undefined,
 	tag: string | undefined,
+	ciMode: boolean,
 	flushJunit: () => void,
 ): Promise<void> {
 	wireLinearLogging(executor, config, options);
 	if (!hasExplicitTarget) {
-		console.log(
-			chalk.yellow(
-				"No tasks specified. Pass task ids or -t <tag>, set `defaultRun` in task-runner.json, or run `layermix list` to see available tasks.",
-			),
-		);
+		const hint =
+			"No tasks specified. Pass task ids or -t <tag>, set `defaultRun` in task-runner.json, or run `layermix list` to see available tasks.";
+		if (ciMode) {
+			console.error(chalk.red(`Error: ${hint}`));
+			process.exit(1);
+		}
+		console.log(chalk.yellow(hint));
 		return;
 	}
 	const success = await executor.execute(targetIds, tag);
@@ -496,6 +529,7 @@ program
 				hasExplicitTarget = !!targetIds || !!tag;
 			}
 
+			validateExplicitTarget(config, targetIds, tag);
 			applyCliArgs(executor, cliArgs, targetIds, tag);
 
 			if (useTui) {
@@ -523,6 +557,7 @@ program
 				hasExplicitTarget,
 				targetIds,
 				tag,
+				ciMode,
 				flushJunit,
 			);
 		} catch (error) {

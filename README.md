@@ -28,7 +28,7 @@ layermix -t test                   # by tag
 layermix run build compile         # explicit form, multiple ids
 ```
 
-A bare `layermix` with no target is a no-op in every mode — the TUI opens idle, and linear mode (CI/AI included) prints a hint and exits 0. Set [`defaultRun`](#defaultrun) in `task-runner.json` to give an empty invocation a target, or pass task ids / `-t <tag>` explicitly.
+A bare `layermix` with no target is a no-op — the TUI opens idle, and piped non-CI linear mode prints a hint and exits 0. **CI/AI mode treats an empty target as a hard error (exit 1)** so a scheduled agent or CI job doesn't silently exit green with nothing done. Set [`defaultRun`](#defaultrun) in `task-runner.json` to give an empty invocation a target, or pass task ids / `-t <tag>` explicitly. Unknown task ids or tags are also a hard error (exit 1) in every mode — silent no-ops used to hide typos.
 
 ## Config (`task-runner.json`)
 
@@ -229,7 +229,7 @@ The retry helper also resets tasks downstream of a failure, so re-running isn't 
 
 CI mode is auto-detected via [`is-ci`](https://www.npmjs.com/package/is-ci) (common CI env vars: `CI`, `CONTINUOUS_INTEGRATION`, `GITHUB_ACTIONS`, etc.) or via the explicit `--ci` flag. AI-agent mode is detected from coding-agent env vars (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CURSOR_AGENT`, `CURSOR_TRACE_ID`, `AIDER_MODEL`, `AIDER_CHAT_HISTORY_FILE`, `CONTINUE_SESSION_ID`) or the explicit `--ai` flag; the generic `AI_AGENT` env var is a manual opt-in for anything unlisted.
 
-An empty target never auto-runs everything — regardless of mode (TUI, piped shell, `--ci`, `--ai`, CI-detected). If [`defaultRun`](#defaultrun) is set, that target runs in every linear-mode shape (CI/AI, piped non-CI); otherwise a hint is printed and the process exits 0. The TUI ignores `defaultRun` on purpose and stays idle, so the explicit "pick what to run" UX is preserved.
+An empty target never auto-runs everything — regardless of mode (TUI, piped shell, `--ci`, `--ai`, CI-detected). If [`defaultRun`](#defaultrun) is set, that target runs in every linear-mode shape (CI/AI, piped non-CI). Without `defaultRun`: in CI/AI mode, the command exits **1** with a stderr error so a scheduled job or agent can't silently succeed; in a piped non-CI shell it prints a yellow hint and exits 0; in the TUI it stays idle so the explicit "pick what to run" UX is preserved. Unknown task ids or tags (whether passed on the CLI or via `defaultRun`) also exit 1 in every mode.
 
 ---
 
@@ -263,7 +263,7 @@ Declare an [args-aware task](#task-arguments) — `cmd: "vitest run $1 -t $2"` w
 Set `defaultRun: "-t test"` (or any task id) at the top of `task-runner.json`. CI/AI invocations with no explicit target use it; explicit `layermix -t deploy` from the command line still wins.
 
 **"I'm running from Claude Code / Cursor."**
-Nothing to do — auto-detected via env vars. Output drops to linear, so the agent sees a clean machine-readable stream without any flags. Unlike earlier versions, an empty target no longer auto-runs the whole pipeline — pass explicit task ids / `-t <tag>`, or configure [`defaultRun`](#defaultrun) so the agent has a target to hit.
+Nothing to do — auto-detected via env vars. Output drops to linear, so the agent sees a clean machine-readable stream without any flags. An empty target no longer auto-runs the whole pipeline; in CI/AI mode it's a hard error (exit 1) instead of a silent no-op, so a typo or a missing `defaultRun` fails the job loudly. Pass explicit task ids / `-t <tag>`, or configure [`defaultRun`](#defaultrun) so the agent has a target to hit.
 
 ---
 
@@ -284,7 +284,7 @@ layermix init [--force]                  # scaffold task-runner.json
 | `-a, --arg <value>` | positional value for the target task's `args[i]` (repeatable, in order). Comma-separated for multi-select file/folder args. Single-task targets only — see [Task arguments](#task-arguments) |
 | `--concurrency <n>` | cap parallelism (defaults to CPU count) |
 | `--output-only-failed` | linear mode: only print logs for failed tasks |
-| `--ci` | force linear mode. With no explicit target, runs `defaultRun` if set; otherwise prints a hint and exits 0 |
+| `--ci` | force linear mode. With no explicit target, runs `defaultRun` if set; otherwise exits 1 with an error (no silent no-op in CI) |
 | `--ai` | alias for `--ci` |
 | `--junit <path>` | write a JUnit XML report on exit |
 | `--dry-run-json` | print the execution plan as JSON, run nothing |
@@ -293,8 +293,8 @@ layermix init [--force]                  # scaffold task-runner.json
 
 | Code | Meaning |
 |------|---------|
-| 0    | All targeted tasks succeeded |
-| 1    | One or more tasks failed (or were skipped due to a failed dep), or config/validation error |
+| 0    | All targeted tasks succeeded (or, in piped non-CI mode, no target was specified and no `defaultRun` is configured — a soft hint is printed) |
+| 1    | One or more tasks failed (or were skipped due to a failed dep), an unknown task id or tag was targeted, config/validation failed, or `--ci`/`--ai` was used with no explicit target and no `defaultRun` |
 
 ## For CI / AI agents
 

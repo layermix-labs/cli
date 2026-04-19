@@ -166,11 +166,11 @@ describe("CLI e2e", () => {
 		AI_AGENT: undefined,
 	});
 
-	it("--ci flag triggers linear mode; empty target with no defaultRun prints a hint and exits 0", async () => {
-		// Strip CI + AI env vars so only the flag is driving the mode. Previously
-		// --ci with no target auto-ran everything; now it prints the hint just
-		// like a plain piped shell, so `layermix --ci` in an unfamiliar repo
-		// can't accidentally execute the whole pipeline.
+	it("--ci flag with empty target and no defaultRun exits 1", async () => {
+		// Strip CI + AI env vars so only the flag is driving the mode. In CI/AI
+		// mode an empty target is a hard error — a scheduled agent or CI job has
+		// nothing useful to do without an explicit target or `defaultRun`, and
+		// exiting green would hide that silently.
 		const res = await execa(
 			"node",
 			[VITE_NODE, "--root", ROOT, CLI, "run", "--ci"],
@@ -181,8 +181,8 @@ describe("CLI e2e", () => {
 				stdio: ["ignore", "pipe", "pipe"],
 			},
 		);
-		expect(res.exitCode).toBe(0);
-		expect(res.stdout).toContain("No tasks specified");
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain("No tasks specified");
 		expect(res.stdout).not.toContain("[bad] Failed");
 	});
 
@@ -201,7 +201,7 @@ describe("CLI e2e", () => {
 		expect(res.stdout).toContain("[bad] Failed");
 	});
 
-	it("--ai flag without target prints a hint and exits 0", async () => {
+	it("--ai flag without target exits 1", async () => {
 		const res = await execa(
 			"node",
 			[VITE_NODE, "--root", ROOT, CLI, "run", "--ai"],
@@ -212,21 +212,48 @@ describe("CLI e2e", () => {
 				stdio: ["ignore", "pipe", "pipe"],
 			},
 		);
-		expect(res.exitCode).toBe(0);
-		expect(res.stdout).toContain("No tasks specified");
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain("No tasks specified");
 		expect(res.stdout).not.toContain("[bad] Failed");
 	});
 
-	it("CLAUDECODE env auto-triggers AI-agent mode; empty target prints a hint and exits 0", async () => {
+	it("CLAUDECODE env auto-triggers AI-agent mode; empty target exits 1", async () => {
 		const res = await execa("node", [VITE_NODE, "--root", ROOT, CLI, "run"], {
 			cwd: failing,
 			reject: false,
 			env: { ...strippedEnv(), CLAUDECODE: "1" },
 			stdio: ["ignore", "pipe", "pipe"],
 		});
-		expect(res.exitCode).toBe(0);
-		expect(res.stdout).toContain("No tasks specified");
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain("No tasks specified");
 		expect(res.stdout).not.toContain("[bad] Failed");
+	});
+
+	it("unknown task id exits 1 with a clear error", async () => {
+		const res = await runCli(["notarealtask"], simple);
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain('Unknown task: "notarealtask"');
+	});
+
+	it("unknown tag exits 1 with a clear error", async () => {
+		const res = await runCli(["-t", "notarealtag"], simple);
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain('No tasks match tag "notarealtag"');
+	});
+
+	it("unknown task id in --ci mode exits 1", async () => {
+		const res = await execa(
+			"node",
+			[VITE_NODE, "--root", ROOT, CLI, "run", "--ci", "notarealtask"],
+			{
+				cwd: simple,
+				reject: false,
+				env: strippedEnv(),
+				stdio: ["ignore", "pipe", "pipe"],
+			},
+		);
+		expect(res.exitCode).toBe(1);
+		expect(res.stderr).toContain('Unknown task: "notarealtask"');
 	});
 
 	it("bare run with no target and no CI/AI signal prints a hint and exits 0", async () => {
