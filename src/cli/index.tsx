@@ -23,6 +23,16 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Resolves the package version from package.json so `--version` and the
+// scaffolded `$schema` URL stay in lock-step with what's actually installed.
+// Works in both dev (`vite-node src/cli/index.tsx`) and the compiled dist
+// (`dist/cli/index.js`) because either path is two levels below the package
+// root. npm always ships `package.json`, so this is safe for the published
+// package too.
+const pkg = JSON.parse(
+	fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"),
+) as { version: string };
+
 // Prefer execa's `shortMessage` (one-line command summary), fall back to the
 // Error message, and finally to String(error) for non-Error throwables.
 function extractErrorMessage(error: unknown): string {
@@ -330,7 +340,7 @@ const program = new Command();
 program
 	.name("layermix")
 	.description("A simple DAG-based task runner")
-	.version("2.2.0");
+	.version(pkg.version);
 
 program
 	.command("list")
@@ -437,7 +447,7 @@ program
 			}
 
 			const starter = {
-				$schema: "https://unpkg.com/@layermix/cli@2.2.0/schema.json",
+				$schema: `https://unpkg.com/@layermix/cli@${pkg.version}/schema.json`,
 				tasks: [
 					{ id: "hello", cmd: "echo hello", dependsOn: [], tags: ["example"] },
 					{

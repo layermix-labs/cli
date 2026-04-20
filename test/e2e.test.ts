@@ -10,6 +10,11 @@ const __dirname = path.dirname(__filename);
 
 const ROOT = path.resolve(__dirname, "..");
 const CLI = path.resolve(ROOT, "src/cli/index.tsx");
+const PKG_VERSION = (
+	JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as {
+		version: string;
+	}
+).version;
 const VITE_NODE = path.resolve(
 	ROOT,
 	"node_modules/.pnpm/vite-node@5.2.0_@types+node@25.0.8_tsx@4.21.0/node_modules/vite-node/dist/cli.mjs",
@@ -277,7 +282,7 @@ describe("CLI e2e", () => {
 				fs.readFileSync(path.join(tmp, "task-runner.json"), "utf8"),
 			);
 			expect(written.$schema).toBe(
-				"https://unpkg.com/@layermix/cli@2.2.0/schema.json",
+				`https://unpkg.com/@layermix/cli@${PKG_VERSION}/schema.json`,
 			);
 			expect(Array.isArray(written.tasks)).toBe(true);
 			expect(fs.existsSync(path.join(tmp, "schema.json"))).toBe(false);
