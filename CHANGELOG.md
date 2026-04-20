@@ -1,5 +1,48 @@
 # @layermix/cli
 
+## 2.4.0
+
+### Minor Changes
+
+- 2138910: change(cli): fail loudly on empty or unknown targets in CI/AI mode
+
+  Two user-input failure modes that used to silently exit 0 now exit 1:
+
+  - **Unknown task id / tag** (in every mode, TUI included). `layermix buildd` (typo) previously resolved to an empty task set and exited green; now it prints `Error: Unknown task: "buildd"` to stderr and exits 1. Same for `-t <tag>` when no task carries the tag. Applies to `defaultRun` too — a misconfigured `"defaultRun": "-t teest"` no longer silently no-ops.
+  - **Empty target in CI/AI mode** (`--ci`, `--ai`, `CLAUDECODE`/`CURSOR_AGENT`/etc., or any `is-ci`-detected env). Previously printed a yellow hint and exited 0 — the same as a piped non-CI shell. That was too quiet for a scheduled agent or CI job: the run would appear green while nothing had been done. Now it prints an error and exits 1.
+
+  Piped non-CI linear mode (e.g. `layermix | less` from a dev terminal) is unchanged — it still prints the yellow hint and exits 0, since a human is there to read it. TUI sessions are unchanged: they stay idle on empty target and never fail on construction for a missing id (you navigate and pick).
+
+  **Migration:** if your CI pipeline relied on `layermix --ci` being a no-op when nothing was configured, either pass an explicit target (`layermix --ci -t test`) or set `defaultRun` in `task-runner.json`:
+
+  ```json
+  "defaultRun": "-t test"
+  ```
+
+- 0c9a78a: change(cli): remove the implicit "run everything" fallback in CI/AI mode
+
+  Bare `layermix --ci` (or `--ai`, or any CI-detected invocation) with no explicit target no longer runs every task. It now prints the same `No tasks specified…` hint the piped non-CI path does and exits 0. `layermix --ai` in an unfamiliar repo shouldn't silently execute the whole pipeline.
+
+  **Migration:** set `defaultRun` in `task-runner.json` — it kicks in in every linear-mode shape (CI/AI and piped non-CI) and is unchanged:
+
+  ```json
+  "defaultRun": "-t test"   // or a task id, or "id1 id2"
+  ```
+
+  TUI sessions are unchanged: they still stay idle on an empty target.
+
+### Patch Changes
+
+- addb737: docs: add agent skill template for downstream projects
+
+  New `agent-skill.md` at the repo root — a copy-paste Claude Code skill (with YAML frontmatter) that teaches coding agents how to use `layermix` correctly in projects that consume the CLI: which flags are safe, how to read `task-runner.json`, when to prefer `--dry-run-json`, how to interpret exit codes. README.md gains an "Agent skill template" subsection under "For CI / AI agents" with a one-liner `curl` to drop it into `.claude/skills/layermix/SKILL.md`. Not shipped in the npm tarball — pulled from GitHub directly.
+
+- fe913e2: fix(cli): read version from package.json so `--version` and scaffolded `$schema` stay in sync
+
+  Two spots hardcoded the version string (`2.2.0`) and drifted from `package.json` (`2.3.0`): `program.version(...)` in Commander, and the `$schema` URL in the `init` scaffold. Both now read from `package.json` at startup, so future `pnpm changeset version` bumps don't leave stale strings behind.
+
+  No behavioural change for existing configs. Newly scaffolded `task-runner.json` files will point at the installed CLI's version of the schema on Unpkg.
+
 ## 2.3.0
 
 ### Minor Changes
