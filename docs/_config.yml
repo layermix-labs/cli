@@ -1,0 +1,15 @@
+title: layermix
+description: One task runner for humans, CI, and AI agents
+theme: jekyll-theme-cayman
+show_downloads: false
+
+plugins:
+  - jekyll-relative-links
+  - jekyll-seo-tag
+
+relative_links:
+  enabled: true
+  collections: true
+
+include:
+  - README.md
